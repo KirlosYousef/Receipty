@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.deps import get_extraction_service, get_repo, get_settings
@@ -63,3 +65,44 @@ def ingest_image(
 @router.get("/v1/receipts")
 def receipts(repo: ReceiptRepository = Depends(get_repo)) -> list[dict]:
     return repo.list_all()
+
+
+@router.get("/v1/usage")
+def usage(settings: Settings = Depends(get_settings)) -> dict:
+    """Return aggregated cost/token usage from the JSONL log."""
+    log_path = settings.cost_log_path
+    if not log_path.exists():
+        return {"total_calls": 0, "total_usd": 0, "total_prompt_tokens": 0, "total_completion_tokens": 0, "calls": []}
+
+    calls: list[dict] = []
+    total_usd = 0.0
+    total_prompt = 0
+    total_completion = 0
+
+    for line in log_path.read_text().strip().splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        calls.append(entry)
+        cost = entry.get("usd")
+        if cost is not None:
+            total_usd += float(cost)
+        pt = entry.get("prompt_tokens")
+        if pt is not None:
+            total_prompt += int(pt)
+        ct = entry.get("completion_tokens")
+        if ct is not None:
+            total_completion += int(ct)
+
+    avg_usd = total_usd / len(calls) if calls else 0
+
+    return {
+        "total_calls": len(calls),
+        "total_usd": round(total_usd, 6),
+        "avg_usd_per_call": round(avg_usd, 6),
+        "total_prompt_tokens": total_prompt,
+        "total_completion_tokens": total_completion,
+        "total_tokens": total_prompt + total_completion,
+        "calls": calls[-50:],  # last 50 entries
+    }

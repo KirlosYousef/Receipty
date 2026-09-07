@@ -117,6 +117,36 @@
           <ul class="currency-list" id="currencyList"></ul>
         </div>
 
+        <div class="cost-block" id="costBlock">
+          <div class="section-head">
+            <h2>Cost pulse</h2>
+          </div>
+          <div class="meters">
+            <article class="meter">
+              <p class="meter-label">API calls</p>
+              <p class="meter-value" data-metric="apiCalls"><span>0</span></p>
+            </article>
+            <article class="meter">
+              <p class="meter-label">Total cost</p>
+              <p class="meter-value mono" data-metric="totalUsd"><span>$0</span></p>
+            </article>
+            <article class="meter">
+              <p class="meter-label">Avg / call</p>
+              <p class="meter-value mono" data-metric="avgUsd"><span>$0</span></p>
+            </article>
+            <article class="meter">
+              <p class="meter-label">Total tokens</p>
+              <p class="meter-value mono" data-metric="totalTokens"><span>0</span></p>
+            </article>
+          </div>
+          <div class="cost-log" id="costLog">
+            <p class="meter-label">Recent calls</p>
+            <ul class="cost-list" id="costList">
+              <li class="muted">No calls yet</li>
+            </ul>
+          </div>
+        </div>
+
         <div class="text-ingest">
           <p class="meter-label">Or paste receipt text</p>
           <textarea id="textInput" rows="4" placeholder="Store name&#10;TOTAL 42.18 USD&#10;…"></textarea>

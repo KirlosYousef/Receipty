@@ -259,6 +259,7 @@ async function runQueue(files) {
       try {
         await uploadImage(file, preview);
         await loadLedger();
+        await loadUsage();
       } catch (err) {
         preview.item.classList.remove("scanning");
         preview.item.classList.add("error");
@@ -364,6 +365,7 @@ els.textSubmit.addEventListener("click", async () => {
     }
     els.textInput.value = "";
     await loadLedger();
+    await loadUsage();
     toast("Text extracted");
   } catch (err) {
     toast(err.message || "Extract failed");
@@ -372,10 +374,60 @@ els.textSubmit.addEventListener("click", async () => {
   }
 });
 
+// ── Cost analytics ──
+
+async function loadUsage() {
+  try {
+    const r = await fetch("/v1/usage", { cache: "no-store" });
+    if (!r.ok) return;
+    const data = await r.json();
+    renderUsage(data);
+  } catch { /* silent */ }
+}
+
+function renderUsage(data) {
+  const callsEl = document.querySelector('[data-metric="apiCalls"]');
+  const totalEl = document.querySelector('[data-metric="totalUsd"]');
+  const avgEl = document.querySelector('[data-metric="avgUsd"]');
+  const tokensEl = document.querySelector('[data-metric="totalTokens"]');
+  const costList = document.getElementById("costList");
+
+  if (callsEl) animateNumber(callsEl, data.total_calls);
+  if (totalEl) {
+    const span = totalEl.querySelector("span");
+    span.textContent = "$" + (data.total_usd || 0).toFixed(4);
+  }
+  if (avgEl) {
+    const span = avgEl.querySelector("span");
+    span.textContent = "$" + (data.avg_usd_per_call || 0).toFixed(4);
+  }
+  if (tokensEl) {
+    const span = tokensEl.querySelector("span");
+    span.textContent = (data.total_tokens || 0).toLocaleString();
+  }
+
+  if (costList && data.calls && data.calls.length > 0) {
+    const recent = data.calls.slice(-10).reverse();
+    costList.innerHTML = recent
+      .map((c) => {
+        const cost = c.usd != null ? "$" + Number(c.usd).toFixed(4) : "—";
+        const model = c.model ? c.model.split("/").pop() : "—";
+        const ts = c.ts ? new Date(c.ts).toLocaleTimeString() : "";
+        return `<li>
+          <span class="cost-kind">${escapeHtml(c.kind || "—")}</span>
+          <span class="cost-model" title="${escapeHtml(c.model || "")}">${escapeHtml(model)}</span>
+          <span class="cost-amount">${cost}</span>
+        </li>`;
+      })
+      .join("");
+  }
+}
+
 checkHealth();
 loadLedger().catch(() => {
   els.boardEmpty.textContent = "Could not load the ledger yet. Upload to start.";
 });
+loadUsage();
 
 setInterval(() => {
   loadLedger().catch(() => {});

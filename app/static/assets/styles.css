@@ -648,8 +648,69 @@ main {
 }
 
 .currency-block,
+.cost-block,
 .text-ingest {
   margin-top: 1.1rem;
+}
+
+.cost-block .section-head {
+  margin-bottom: 0.5rem;
+}
+
+.cost-block .section-head h2 {
+  font-size: 1.05rem;
+}
+
+.cost-block .meters {
+  grid-template-columns: 1fr 1fr;
+}
+
+.cost-log {
+  margin-top: 0.75rem;
+}
+
+.cost-list {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.cost-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.cost-list .cost-kind {
+  padding: 0.15rem 0.35rem;
+  border-radius: 5px;
+  background: rgba(11, 143, 122, 0.12);
+  color: var(--teal-deep);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+.cost-list .cost-model {
+  flex: 1;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cost-list .cost-amount {
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .currency-list {
