@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Receipty — receipt intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true">
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="grid-wash"></div>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Receipty</span>
+    </a>
+    <p class="topbar-note">Vision model · structured fields · no invented totals</p>
+    <div class="status-pill" id="apiStatus" data-state="checking">
+      <span class="status-dot"></span>
+      <span class="status-text">checking</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Scan deck</p>
+        <h1>Drop receipts.<br />Watch the model read money.</h1>
+        <p class="lede">
+          Multi-image ingest into constrained JSON —
+          merchant, total, currency, date — with review flags when anything is unsure.
+        </p>
+      </div>
+
+      <div
+        class="dropzone"
+        id="dropzone"
+        tabindex="0"
+        role="button"
+        aria-label="Upload receipt images"
+      >
+        <div class="scan-beam" aria-hidden="true"></div>
+        <div class="dropzone-inner">
+          <p class="drop-title">Drop images here</p>
+          <p class="drop-sub">or click · jpeg / png / webp · many at once</p>
+          <button type="button" class="btn primary" id="pickFiles">Choose files</button>
+          <input
+            type="file"
+            id="fileInput"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            hidden
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="queue-section" id="queueSection" hidden>
+      <div class="section-head">
+        <h2>Scan queue</h2>
+        <p id="queueMeta">0 in flight</p>
+      </div>
+      <div class="queue" id="queue"></div>
+    </section>
+
+    <section class="workspace">
+      <div class="board-col">
+        <div class="section-head">
+          <h2>Extraction board</h2>
+          <div class="filters">
+            <button type="button" class="chip active" data-filter="all">All</button>
+            <button type="button" class="chip" data-filter="receipt">Receipts</button>
+            <button type="button" class="chip" data-filter="review">Needs review</button>
+            <button type="button" class="chip" data-filter="reject">Not receipts</button>
+          </div>
+        </div>
+        <div class="board" id="board"></div>
+        <p class="empty" id="boardEmpty">No extractions yet. Drop a stack of receipts to fill the board.</p>
+      </div>
+
+      <aside class="analytics" aria-label="Analytics">
+        <div class="section-head">
+          <h2>Live pulse</h2>
+          <button type="button" class="btn ghost" id="refreshBtn">Refresh</button>
+        </div>
+
+        <div class="meters">
+          <article class="meter">
+            <p class="meter-label">Processed</p>
+            <p class="meter-value" data-metric="total"><span>0</span></p>
+          </article>
+          <article class="meter">
+            <p class="meter-label">True receipts</p>
+            <p class="meter-value" data-metric="receipts"><span>0</span></p>
+            <div class="bar"><i data-bar="receiptRate"></i></div>
+          </article>
+          <article class="meter">
+            <p class="meter-label">Needs review</p>
+            <p class="meter-value warn" data-metric="review"><span>0</span></p>
+            <div class="bar warn"><i data-bar="reviewRate"></i></div>
+          </article>
+          <article class="meter">
+            <p class="meter-label">Spend captured</p>
+            <p class="meter-value mono" data-metric="spend"><span>—</span></p>
+          </article>
+        </div>
+
+        <div class="currency-block">
+          <p class="meter-label">By currency</p>
+          <ul class="currency-list" id="currencyList"></ul>
+        </div>
+
+        <div class="text-ingest">
+          <p class="meter-label">Or paste receipt text</p>
+          <textarea id="textInput" rows="4" placeholder="Store name&#10;TOTAL 42.18 USD&#10;…"></textarea>
+          <button type="button" class="btn primary full" id="textSubmit">Extract text</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>Receipty · constrained extraction</span>
+    <a href="/docs">API docs</a>
+  </footer>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="/assets/app.js" type="module"></script>
+</body>
+</html>
