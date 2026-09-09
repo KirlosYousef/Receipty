@@ -1,4 +1,4 @@
-from app.domain.schemas import ReceiptExtract
+from app.domain.schemas import Outcome, ReceiptExtract
 
 CODES = {
     "egp": "EGP",
@@ -25,6 +25,8 @@ def apply_postprocess(row: ReceiptExtract, currency_hint: str) -> ReceiptExtract
         row.currency = None
         row.date = None
         row.tax = None
+        if row.outcome != Outcome.extraction_failed:
+            row.outcome = Outcome.not_receipt
         row.needs_review = True
         return row
     if row.total is None:

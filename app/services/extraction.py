@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
-from app.domain.schemas import ReceiptExtract
+from app.domain.schemas import Outcome, ReceiptExtract
 from app.llm.prompts import EXTRACTION_PROMPT
 from app.llm.provider import LLMProvider
 from app.services.postprocess import apply_postprocess
@@ -40,13 +40,10 @@ class ExtractionService:
     def extract_from_image(self, image_bytes: bytes, mime: str) -> ReceiptExtract:
         data_url = f"data:{mime};base64,{base64.b64encode(image_bytes).decode()}"
         messages: list[dict[str, Any]] = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": EXTRACTION_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }
+            {"role": "system", "content": EXTRACTION_PROMPT},
+            {"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": data_url}}
+            ]},
         ]
         return self._run(messages, currency_hint=mime, kind="image")
 
@@ -67,7 +64,7 @@ class ExtractionService:
         except ValidationError:
             # Refuse to invent fields when the model returns garbage JSON.
             log.warning("bad model json: %s", content[:300])
-            row = ReceiptExtract(is_receipt=False, needs_review=True)
+            row = ReceiptExtract(is_receipt=False, outcome=Outcome.extraction_failed)
 
         if self._usage is not None:
             self._usage.log(completion, kind)
