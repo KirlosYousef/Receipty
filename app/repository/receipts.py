@@ -21,7 +21,7 @@ class ReceiptRepository:
                     currency TEXT,
                     date TEXT,
                     tax TEXT,
-                    needs_review INTEGER NOT NULL
+                    outcome TEXT
                 )
                 """
             )
@@ -40,7 +40,7 @@ class ReceiptRepository:
             cur = conn.execute(
                 """
                 INSERT INTO receipts
-                (is_receipt, merchant, total, currency, date, tax, needs_review)
+                (is_receipt, merchant, total, currency, date, tax, outcome)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -50,7 +50,7 @@ class ReceiptRepository:
                     row.currency,
                     str(row.date) if row.date is not None else None,
                     str(row.tax) if row.tax is not None else None,
-                    int(row.needs_review),
+                    row.outcome if row.outcome is not None else None,
                 ),
             )
             conn.commit()

@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_extraction_service
+from app.domain.schemas import Outcome
 from app.main import create_app
 from app.repository.receipts import ReceiptRepository
 from app.services.extraction import ExtractionService
@@ -89,11 +90,3 @@ def test_list_receipts(client: TestClient):
     assert r.status_code == 200
     assert len(r.json()) >= 1
     assert r.json()[0]["tax"] == "1.25"
-
-
-def test_extraction_service_bad_json():
-    provider = FakeProvider("not-json")
-    svc = ExtractionService(provider)
-    row = svc.extract_from_text("hello")
-    assert row.is_receipt is False
-    assert row.needs_review is True

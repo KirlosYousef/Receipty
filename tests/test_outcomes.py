@@ -36,7 +36,6 @@ def test_complete_receipt_is_success():
         date="2024-01-15",
     )
     assert row.outcome == Outcome.success
-    assert row.needs_review is False
 
 
 def test_receipt_missing_total_needs_review():
@@ -47,7 +46,6 @@ def test_receipt_missing_total_needs_review():
         currency="USD",
     )
     assert row.outcome == Outcome.needs_review
-    assert row.needs_review is True
 
 
 def test_confident_non_receipt_scrubbed_and_classified():

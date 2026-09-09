@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.domain.schemas import ReceiptExtract
+from app.domain.schemas import Outcome, ReceiptExtract
 from app.services.postprocess import apply_postprocess, infer_currency
 
 
@@ -20,20 +20,20 @@ def test_non_receipt_nulls_money_fields():
         currency="USD",
         date=None,
         tax=Decimal("1.00"),
-        needs_review=False,
+        outcome=Outcome.not_receipt,
     )
     out = apply_postprocess(row, "EGP")
     assert out.merchant is None
     assert out.total is None
     assert out.currency is None
     assert out.tax is None
-    assert out.needs_review is True
+    assert out.outcome == Outcome.not_receipt
 
 
 def test_missing_total_forces_review():
     row = ReceiptExtract(is_receipt=True, merchant="Shop", total=None, currency="USD")
     out = apply_postprocess(row, "")
-    assert out.needs_review is True
+    assert out.outcome == Outcome.needs_review
 
 
 def test_currency_inferred_when_missing():

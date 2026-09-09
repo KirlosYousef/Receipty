@@ -32,18 +32,6 @@ class ReceiptExtract(BaseModel):
     date: Date | None = None
     tax: Decimal | None = Field(default=None, decimal_places=2)
     outcome: Outcome | None = None
-    _needs_review_override: bool | None = PrivateAttr(default=None)
-
-    @computed_field
-    @property
-    def needs_review(self) -> bool:
-        if self._needs_review_override is not None:
-            return self._needs_review_override
-        return self.outcome in {Outcome.needs_review, Outcome.extraction_failed}
-
-    @needs_review.setter
-    def needs_review(self, value: bool) -> None:
-        self._needs_review_override = value
     
     @field_validator("total", "tax", mode="before")
     @classmethod

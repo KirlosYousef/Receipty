@@ -1,11 +1,11 @@
 from datetime import date
 from decimal import Decimal
 
-from app.domain.schemas import ReceiptExtract
+from app.domain.schemas import Outcome, ReceiptExtract
 
 
 def test_total_strips_currency():
-    row = ReceiptExtract(is_receipt=True, total="186.50 EGP", needs_review=False)
+    row = ReceiptExtract(is_receipt=True, total="186.50 EGP")
     assert row.total == Decimal("186.50")
 
 
@@ -15,10 +15,9 @@ def test_unreadable_total_needs_review_flag_on_model():
         merchant="Carrefour",
         total=None,
         currency="EGP",
-        needs_review=True,
     )
     assert row.total is None
-    assert row.needs_review is True
+    assert row.outcome == Outcome.needs_review
 
 
 def test_not_a_receipt_defaults():
@@ -33,7 +32,6 @@ def test_valid_receipt():
         merchant="Amazon",
         total=500.0,
         currency="USD",
-        needs_review=False,
     )
     assert row.total == Decimal("500.0")
     assert row.merchant == "Amazon"

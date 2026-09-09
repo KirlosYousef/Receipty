@@ -27,10 +27,9 @@ def apply_postprocess(row: ReceiptExtract, currency_hint: str) -> ReceiptExtract
         row.tax = None
         if row.outcome != Outcome.extraction_failed:
             row.outcome = Outcome.not_receipt
-        row.needs_review = True
         return row
     if row.total is None:
-        row.needs_review = True
+        row.outcome = Outcome.needs_review
     if row.currency is None:
         row.currency = infer_currency(currency_hint)
     return row
