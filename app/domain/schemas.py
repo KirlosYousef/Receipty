@@ -4,7 +4,7 @@ from decimal import Decimal
 from enum import Enum
 import re
 
-from pydantic import BaseModel, Field, PrivateAttr, computed_field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, computed_field, field_validator, model_validator
 
 class Outcome(str, Enum):
     success = "success"
@@ -49,7 +49,15 @@ def _money(v):
 
     return token
 
+class ReceiptLLMOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
+    is_receipt: bool
+    merchant: str | None
+    total: str | None
+    currency: str | None
+    date: str | None
+    tax: str | None
 
 class ReceiptExtract(BaseModel):
     is_receipt: bool

@@ -32,7 +32,7 @@ def client(tmp_path: Path):
     def fake_service():
         provider = FakeProvider(
             '{"is_receipt": true, "merchant": "Test Cafe", "total": "12.50", '
-            '"currency": "USD", "date": "2024-01-15", "tax": "1.25", "needs_review": false}'
+            '"currency": "USD", "date": "2024-01-15", "tax": "1.25"}'
         )
         return ExtractionService(provider)
 

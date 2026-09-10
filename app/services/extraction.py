@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
-from app.domain.schemas import Outcome, ReceiptExtract
+from app.domain.schemas import Outcome, ReceiptExtract, ReceiptLLMOutput
 from app.llm.prompts import EXTRACTION_PROMPT
 from app.llm.provider import LLMProvider
 from app.services.postprocess import apply_postprocess
@@ -57,10 +57,15 @@ class ExtractionService:
         completion = self._provider.complete(messages)
         content = completion.choices[0].message.content
         if content is None:
-            raise ValueError("Model returned no content")
-
+            return ReceiptExtract(is_receipt=False, outcome=Outcome.extraction_failed)
         try:
-            row = ReceiptExtract.model_validate_json(_strip_json_fences(content))
+            llm_output = ReceiptLLMOutput.model_validate_json(
+                _strip_json_fences(content)
+            )
+
+            row = ReceiptExtract.model_validate(
+                llm_output.model_dump()
+            )
         except ValidationError:
             # Refuse to invent fields when the model returns garbage JSON.
             log.warning("bad model json: %s", content[:300])

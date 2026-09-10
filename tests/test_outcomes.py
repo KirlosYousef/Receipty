@@ -8,7 +8,7 @@ from app.services.postprocess import apply_postprocess
 class FakeProvider:
     """Same pattern as tests/test_api.py — returns canned model content."""
 
-    def __init__(self, content: str):
+    def __init__(self, content: str | None):
         self.content = content
 
     def complete(self, messages):
@@ -60,3 +60,43 @@ def test_confident_non_receipt_scrubbed_and_classified():
     assert out.merchant is None
     assert out.total is None
     assert out.currency is None
+
+def test_unexpected_model_field_is_extraction_failed():
+    provider = FakeProvider(
+        """
+        {
+            "is_receipt": true,
+            "merchant": "Amazon",
+            "total": "50.00",
+            "currency": "USD",
+            "date": null,
+            "tax": null,
+            "unexpected": "should not be accepted"
+        }
+        """
+    )
+
+    row = ExtractionService(provider).extract_from_text(
+        "Amazon Total 50.00 USD"
+    )
+
+    assert row.outcome == Outcome.extraction_failed
+    assert row.merchant is None
+    assert row.total is None
+
+def test_answer_wrapper_is_extraction_failed():
+    provider = FakeProvider(
+        '{"answer": "{\\"is_receipt\\": false}"}'
+    )
+
+    row = ExtractionService(provider).extract_from_text("not a receipt")
+
+    assert row.outcome == Outcome.extraction_failed
+
+def test_missing_model_content_is_extraction_failed():
+    provider = FakeProvider(None)
+
+    row = ExtractionService(provider).extract_from_text("receipt")
+
+    assert row.outcome == Outcome.extraction_failed
+    assert row.total is None
