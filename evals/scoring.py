@@ -1,11 +1,13 @@
 from decimal import Decimal
 from typing import Any
 
-from app.domain.schemas import ReceiptExtract
+from app.domain.schemas import Outcome, ReceiptExtract
 
 
 def receipt_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
-    return pred.is_receipt == bool(gold["is_receipt"])
+    if pred.outcome == Outcome.extraction_failed:
+        return False  # the system made no classification; it cannot be correct
+    return (pred.outcome != Outcome.not_receipt) == bool(gold["is_receipt"])
 
 
 def total_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:

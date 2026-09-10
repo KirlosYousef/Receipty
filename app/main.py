@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.core.config import get_settings
+from app.domain.schemas import Outcome
 from app.repository.receipts import ReceiptRepository
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     def dashboard() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
+    
     return app
 
 
