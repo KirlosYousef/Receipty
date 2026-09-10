@@ -16,12 +16,39 @@ class Outcome(str, Enum):
 def _money(v):
     if v is None or v == "":
         return None
+
     if isinstance(v, (int, float, Decimal)):
         return v
-    m = re.search(r"-?\d+(?:[.,]\d+)?", str(v))
-    if not m:
+
+    match = re.search(r"-?\d[\d.,]*", str(v))
+    if not match:
         return None
-    return m.group(0).replace(",", ".")
+
+    token = match.group(0)
+
+    if "." in token and "," in token:
+        if token.rfind(".") > token.rfind(","):
+            # 1,234.56 → 1234.56
+            token = token.replace(",", "")
+        else:
+            # 1.234,56 → 1234.56
+            token = token.replace(".", "").replace(",", ".")
+
+    # A single separator followed by exactly three digits is ambiguous:
+    # "1.234" could mean 1.234 or 1,234.
+    if token.count(".") + token.count(",") == 1:
+        separator = "." if "." in token else ","
+        fractional_part = token.rsplit(separator, 1)[1]
+
+        if len(fractional_part) == 3:
+            return None
+
+    elif "," in token:
+        # 12,50 → 12.50
+        token = token.replace(",", ".")
+
+    return token
+
 
 
 class ReceiptExtract(BaseModel):
@@ -65,7 +92,11 @@ class ReceiptExtract(BaseModel):
         if self.outcome is None:
             if not self.is_receipt:
                 self.outcome = Outcome.not_receipt
-            elif self.total is None or self.currency is None:
+            elif (
+                self.total is None
+                or self.currency is None
+                or self.total < 0
+            ):
                 self.outcome = Outcome.needs_review
             else:
                 self.outcome = Outcome.success
