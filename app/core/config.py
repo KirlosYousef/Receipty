@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     db_path: Path = Path("receipts.db")
     cost_log_path: Path = Path("logs/cost.jsonl")
     max_image_bytes: int = 8 * 1024 * 1024
-    max_retries: int = 3
+    max_attempts: int = Field(default=3, ge=1)
+    total_deadline_seconds: float = Field(default=120.0, gt=0)
+    retry_base_delay_seconds: float = Field(default=1.0, ge=0)
     request_timeout_seconds: float = Field(
         default=60.0,
         gt=0,
