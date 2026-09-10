@@ -48,6 +48,7 @@ class OpenRouterProvider:
                             "require_parameters": True,
                         }
                     },
+                    timeout=self._settings.request_timeout_seconds,
                 )
             except RateLimitError as e:
                 msg = str(e)

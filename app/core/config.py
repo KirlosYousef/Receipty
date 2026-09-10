@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from pydantic import Field
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +15,10 @@ class Settings(BaseSettings):
     cost_log_path: Path = Path("logs/cost.jsonl")
     max_image_bytes: int = 8 * 1024 * 1024
     max_retries: int = 3
+    request_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+    )
 
 
 @lru_cache
