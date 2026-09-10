@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_extraction_service
+from app.core.config import Settings
 from app.domain.schemas import Outcome
 from app.main import create_app
 from app.repository.receipts import ReceiptRepository
@@ -18,30 +19,52 @@ class FakeProvider:
     def complete(self, messages):
         return SimpleNamespace(
             model="fake",
-            choices=[SimpleNamespace(message=SimpleNamespace(content=self.content))],
-            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, cost=0, model_extra={}),
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=self.content)
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=1,
+                completion_tokens=1,
+                cost=0,
+                model_extra={},
+            ),
         )
+
+    def close(self) -> None:
+        pass
 
 
 @pytest.fixture
 def client(tmp_path: Path):
-    app = create_app()
-    repo = ReceiptRepository(tmp_path / "test.db")
-    repo.init_db()
+    fake_provider = FakeProvider(
+        """
+        {
+            "is_receipt": true,
+            "merchant": "Test Cafe",
+            "total": "12.50",
+            "currency": "USD",
+            "date": "2024-01-15",
+            "tax": "1.25"
+        }
+        """
+    )
 
-    def fake_service():
-        provider = FakeProvider(
-            '{"is_receipt": true, "merchant": "Test Cafe", "total": "12.50", '
-            '"currency": "USD", "date": "2024-01-15", "tax": "1.25"}'
-        )
-        return ExtractionService(provider)
+    settings = Settings(
+        openrouter_api_key="test-key",
+        db_path=tmp_path / "test.db",
+        cost_log_path=tmp_path / "cost.jsonl",
+    )
 
-    app.dependency_overrides[get_extraction_service] = fake_service
-    with TestClient(app) as c:
-        app.state.repo = repo
-        yield c
-    app.dependency_overrides.clear()
+    app = create_app(
+        settings=settings,
+        provider_factory=lambda _: fake_provider,
+    )
 
+    with TestClient(app) as test_client:
+        yield test_client
+    
 
 def test_health(client: TestClient):
     r = client.get("/health")

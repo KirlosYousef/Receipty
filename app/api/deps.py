@@ -26,9 +26,5 @@ def _usage_logger(path: str) -> UsageLogger:
     return UsageLogger(Path(path))
 
 
-def get_extraction_service(
-    settings: Settings = Depends(get_settings),
-) -> ExtractionService:
-    provider = OpenRouterProvider(settings)
-    usage = _usage_logger(str(settings.cost_log_path))
-    return ExtractionService(provider, usage)
+def get_extraction_service(request: Request) -> ExtractionService:
+    return request.app.state.extraction_service

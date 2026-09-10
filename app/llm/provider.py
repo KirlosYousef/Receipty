@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 class LLMProvider(Protocol):
     def complete(self, messages: list[dict[str, Any]]) -> Any: ...
-
+    def close(self) -> None: ...
 
 class OpenRouterProvider:
     def __init__(self, settings: Settings):
@@ -81,3 +81,6 @@ class OpenRouterProvider:
         if last is None:
             raise ProviderError("complete() failed with no exception")
         raise ProviderError(str(last)) from last
+
+    def close(self) -> None:
+        self._client.close()
