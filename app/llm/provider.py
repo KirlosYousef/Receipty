@@ -8,6 +8,7 @@ from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 
 from app.core.config import Settings
 from app.core.exceptions import CreditsExhausted, DailyLimitReached, ProviderError
+from app.domain.schemas import ReceiptLLMOutput
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +35,19 @@ class OpenRouterProvider:
                 return self._client.chat.completions.create(
                     model=self._settings.model,
                     messages=messages,
-                    response_format={"type": "json_object"},
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "receipt_extraction",
+                            "strict": True,
+                            "schema": ReceiptLLMOutput.model_json_schema(),
+                        },
+                    },
+                    extra_body={
+                        "provider": {
+                            "require_parameters": True,
+                        }
+                    },
                 )
             except RateLimitError as e:
                 msg = str(e)
