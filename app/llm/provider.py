@@ -1,36 +1,67 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from typing import Any, Protocol
 
 from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 
 from app.core.config import Settings
-from app.core.exceptions import CreditsExhausted, DailyLimitReached, ProviderError
+from app.core.exceptions import CreditsExhausted, DailyLimitReached, ProviderDeadlineExceeded, ProviderError
 from app.domain.schemas import ReceiptLLMOutput
+
+from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
+def _full_jitter(maximum: float) -> float:
+    return random.uniform(0, maximum)
 
 class LLMProvider(Protocol):
     def complete(self, messages: list[dict[str, Any]]) -> Any: ...
     def close(self) -> None: ...
 
 class OpenRouterProvider:
-    def __init__(self, settings: Settings):
-        if not settings.openrouter_api_key:
-            raise ProviderError("OPENROUTER_API_KEY is not set")
-        self._settings = settings
-        self._client = OpenAI(
-            base_url=settings.openrouter_base_url,
-            api_key=settings.openrouter_api_key,
-        )
+    def __init__(
+            self,
+            settings: Settings,
+            *,
+            sleep_fn: Callable[[float], None] | None = None,
+            jitter_fn: Callable[[float], float] | None = None,
+            clock: Callable[[], float] | None = None,
+        ):
+            if not settings.openrouter_api_key:
+                raise ProviderError("OPENROUTER_API_KEY is not set")
 
+            self._settings = settings
+            self._sleep = sleep_fn or time.sleep
+            self._jitter = jitter_fn or _full_jitter
+            self._clock = clock or time.monotonic
+
+            self._client = OpenAI(
+                base_url=settings.openrouter_base_url,
+                api_key=settings.openrouter_api_key,
+                max_retries=0,
+            )
+    
     def complete(self, messages: list[dict[str, Any]]) -> Any:
         delay = 1.0
+        started_at = self._clock()
         last: BaseException | None = None
-        for attempt in range(1, self._settings.max_retries + 1):
+
+        for attempt in range(1, self._settings.max_attempts + 1):
+            elapsed = self._clock() - started_at
+            remaining = self._settings.total_deadline_seconds - elapsed
+
+            if remaining <= 0:
+                raise ProviderDeadlineExceeded("Provider deadline exhausted")
+
+            attempt_timeout = min(
+                self._settings.request_timeout_seconds,
+                remaining,
+            )
+
             try:
                 return self._client.chat.completions.create(
                     model=self._settings.model,
@@ -48,7 +79,8 @@ class OpenRouterProvider:
                             "require_parameters": True,
                         }
                     },
-                    timeout=self._settings.request_timeout_seconds,
+                timeout=attempt_timeout,
+
                 )
             except RateLimitError as e:
                 msg = str(e)
@@ -67,17 +99,26 @@ class OpenRouterProvider:
             except APIConnectionError as e:
                 last = e
 
-            if attempt == self._settings.max_retries:
+            if attempt == self._settings.max_attempts:
+                raise ProviderDeadlineExceeded(
+                    "Provider deadline exhausted after max attempts"
+                )
                 break
-            log.warning(
-                "OpenRouter retry %s/%s in %.0fs (%s)",
-                attempt,
-                self._settings.max_retries,
-                delay,
-                last,
+
+            delay_cap = (
+                self._settings.retry_base_delay_seconds
+                * (2 ** (attempt - 1))
             )
-            time.sleep(delay)
-            delay *= 2
+            delay = self._jitter(delay_cap)
+
+            elapsed = self._clock() - started_at
+            remaining = self._settings.total_deadline_seconds - elapsed
+
+            if remaining <= 0:
+                raise ProviderError("Provider deadline exhausted")
+
+            self._sleep(min(delay, remaining))
+
 
         if last is None:
             raise ProviderError("complete() failed with no exception")

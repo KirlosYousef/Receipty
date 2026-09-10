@@ -8,3 +8,7 @@ class CreditsExhausted(ProviderError):
 
 class DailyLimitReached(ProviderError):
     """Free-tier daily request cap hit; credits usually do not lift this."""
+
+
+class ProviderDeadlineExceeded(ProviderError):
+    """The total provider operation deadline was exhausted."""
