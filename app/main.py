@@ -1,8 +1,11 @@
+import re
+from uuid import uuid4
+
+from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
 
-from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -15,7 +18,7 @@ from app.repository.receipts import ReceiptRepository
 from app.services.extraction import ExtractionService
 
 STATIC_DIR = Path(__file__).parent / "static"
-
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 ProviderFactory = Callable[[Settings], LLMProvider]
 
@@ -45,6 +48,22 @@ def create_app(
             provider.close()
 
     app = FastAPI(title="Receipty", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def request_id_middleware(request: Request, call_next):
+        incoming = request.headers.get("X-Request-ID")
+
+        if incoming and REQUEST_ID_PATTERN.fullmatch(incoming):
+            request_id = incoming
+        else:
+            request_id = str(uuid4())
+
+        request.state.request_id = request_id
+
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
     app.include_router(router)
 
     assets = STATIC_DIR / "assets"

@@ -11,7 +11,7 @@ class FakeProvider:
     def __init__(self, content: str | None):
         self.content = content
 
-    def complete(self, messages):
+    def complete(self, messages, *, request_id=None):
         return SimpleNamespace(
             model="fake",
             choices=[SimpleNamespace(message=SimpleNamespace(content=self.content))],
@@ -100,3 +100,37 @@ def test_missing_model_content_is_extraction_failed():
 
     assert row.outcome == Outcome.extraction_failed
     assert row.total is None
+
+class CapturingRequestIdProvider(FakeProvider):
+    def __init__(self, content: str):
+        super().__init__(content)
+        self.request_ids: list[str | None] = []
+
+    def complete(self, messages, *, request_id=None):
+        self.request_ids.append(request_id)
+        return super().complete(messages)
+
+
+def test_service_passes_request_id_to_provider():
+    provider = CapturingRequestIdProvider(
+        """
+        {
+            "is_receipt": true,
+            "merchant": "Amazon",
+            "total": "50.00",
+            "currency": "USD",
+            "date": null,
+            "tax": null
+        }
+        """
+    )
+
+    service = ExtractionService(provider)
+
+    row = service.extract_from_text(
+        "Amazon Total 50.00 USD",
+        request_id="request-123",
+    )
+
+    assert row.outcome == Outcome.success
+    assert provider.request_ids == ["request-123"]

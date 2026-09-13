@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import logging
+
 import httpx
 import pytest
 from openai import APIConnectionError, APIStatusError, RateLimitError
@@ -228,3 +230,26 @@ def test_sdk_retries_are_disabled(monkeypatch):
     )
 
     assert captured["max_retries"] == 0
+
+
+def test_retry_log_includes_request_id(caplog):
+    completions = AlwaysConnectionError()
+    provider = OpenRouterProvider(
+        Settings(openrouter_api_key="test-key", max_attempts=2),
+        sleep_fn=lambda _: None,
+        jitter_fn=lambda maximum: 0.0,
+        clock=lambda: 0.0,
+    )
+    provider._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=completions)
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.llm.provider"):
+        with pytest.raises(ProviderError):
+            provider.complete(
+                [{"role": "user", "content": "receipt"}],
+                request_id="request-123",
+            )
+
+    assert "provider_retry" in caplog.text
+    assert "request_id=request-123" in caplog.text
