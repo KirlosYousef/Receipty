@@ -1,0 +1,24 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["B008", "E501"]
+
+[tool.pyright]
+include = ["app"]
+exclude = ["tests", "evals"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "basic"
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true

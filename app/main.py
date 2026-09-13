@@ -1,17 +1,15 @@
 import re
-from uuid import uuid4
-
-from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
+from uuid import uuid4
 
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.core.config import Settings, get_settings
-from app.domain.schemas import Outcome
 from app.llm.provider import LLMProvider, OpenRouterProvider
 from app.observability.usage import UsageLogger
 from app.repository.receipts import ReceiptRepository
@@ -74,7 +72,6 @@ def create_app(
     def dashboard() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
-    
     return app
 
 

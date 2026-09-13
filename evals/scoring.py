@@ -27,7 +27,9 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
         "total_ok": t_ok,
         "ok": r_ok and t_ok,
         "pred_merchant": pred.merchant,
-        "pred_total": str(pred.total) if isinstance(pred.total, Decimal) else pred.total,
+        "pred_total": str(pred.total)
+        if isinstance(pred.total, Decimal)
+        else pred.total,
         "gold_merchant": gold.get("merchant"),
         "gold_total": gold_total_value(gold),
     }

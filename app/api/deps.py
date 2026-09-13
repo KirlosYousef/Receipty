@@ -1,9 +1,8 @@
 from functools import lru_cache
 
-from fastapi import Depends, Request
+from fastapi import Request
 
-from app.core.config import Settings, get_settings
-from app.llm.provider import OpenRouterProvider
+from app.core.config import get_settings
 from app.observability.usage import UsageLogger
 from app.repository.receipts import ReceiptRepository
 from app.services.extraction import ExtractionService

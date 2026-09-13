@@ -34,7 +34,9 @@ def build_service() -> ExtractionService:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Receipty image evals")
-    parser.add_argument("--json", type=Path, default=None, help="Write report JSON here")
+    parser.add_argument(
+        "--json", type=Path, default=None, help="Write report JSON here"
+    )
     args = parser.parse_args()
 
     labels = {
@@ -89,7 +91,9 @@ def main() -> None:
 
     if args.json is not None:
         args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2) + "\n")
+        args.json.write_text(
+            json.dumps({"summary": summary, "rows": rows}, indent=2) + "\n"
+        )
 
 
 if __name__ == "__main__":
