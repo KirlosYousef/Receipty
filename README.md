@@ -1,42 +1,138 @@
 # Receipty
 
-Receipt photo or pasted text → structured `{merchant, total, currency, date}`.
-If the total is missing or unreadable, the API returns `total: null` and `needs_review: true`. It does not invent amounts.
+**Constrained multimodal receipt extraction.** A vision-capable LLM reads a receipt photo or pasted text and returns schema-valid `{merchant, total, currency, date, tax}` — or an explicit outcome when it cannot. Totals are never invented.
 
-## Why
+Receipty is a production-minded FastAPI service: OpenRouter chat completions with **strict JSON schema**, Pydantic validation, locale-aware money parsing, deterministic post-rules, a SQLite ledger, cost logging, and a labeled eval harness on the **same extraction path** the API uses.
 
-Expense tools fail quietly when a model hallucinates a total. Receipty treats extraction as a constrained pipeline: model JSON → Pydantic validation → deterministic post-rules → SQLite ledger, with a small labeled eval set on the same code path.
+| Stack | |
+| --- | --- |
+| Runtime | Python 3.12, FastAPI, Uvicorn, Pydantic v2 |
+| Model | OpenAI SDK → [OpenRouter](https://openrouter.ai) (default `z-ai/glm-5.3-flash`) |
+| Data | SQLite ledger + JSONL cost log |
+| UI | Static scan-deck dashboard (multi-upload, review board, usage pulse) |
+| Quality | Ruff, Pyright, Pytest (≥80% branch coverage), GitHub Actions |
+
+## Why this exists
+
+Expense and “OCR” products fail quietly when a model hallucinates a total. Receipty treats the LLM as an **untrusted extractor**, not a source of truth:
+
+1. Ask the model only for fields that appear on the receipt.
+2. Force a **strict structured-output schema** so extra keys and free-form prose cannot slip through.
+3. Parse money and dates with **deterministic rules** that refuse ambiguous tokens.
+4. Emit an **outcome** (`success` / `needs_review` / `not_receipt` / `extraction_failed`) so downstream software can route, not guess.
+5. Measure the pipeline on labeled images — and document what those scores do *not* prove.
+
+That combination — constrained generation, fail-closed validation, human-in-the-loop outcomes, and honest evaluation — is the core of the project.
+
+## What this project demonstrates
+
+Aimed at AI / applied-ML engineering work: shipping an extraction system rather than a chatbot.
+
+| Theme | In this repo |
+| --- | --- |
+| **Structured generation** | OpenRouter `response_format` = `json_schema` named `receipt_extraction`, `strict: true`, schema from `ReceiptLLMOutput.model_json_schema()`. `extra_body.provider.require_parameters` so the gateway must honor the schema. Wire model uses `extra="forbid"`. |
+| **Hallucination control** | Prompt: copy visible fields, never invent, null if unreadable. Invalid or fenced JSON → `outcome=extraction_failed` with no invented money fields. |
+| **Document / vision LLM** | Image ingest as a `data:{mime};base64,...` `image_url` (JPEG / PNG / WebP, max ~8 MB). Text paste uses the same prompt and post-rules. No classical OCR stack. |
+| **Locale-aware parsing** | `_money()` handles `1,234.56` vs `1.234,56`; a single separator plus three fractional digits is treated as ambiguous and becomes `null`. Dates accept several common formats; unparseable dates become `null`. |
+| **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Currency may be inferred from text hints (EGP / USD / EUR) only when unique. Negative totals need review. |
+| **Evaluation** | 20 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics: `is_receipt` and `total` only. `extraction_failed` is never a correct receipt classification. |
+| **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
+| **Cost observability** | Per-call prompt/completion tokens and USD → `logs/cost.jsonl`; aggregated on `GET /v1/usage` and the dashboard. |
+| **Testability** | `LLMProvider` protocol + `create_app(provider_factory=...)`. CI runs lint, types, and coverage **without** a live API key. |
 
 ## Truthful extraction contract
 
-Receipty guarantees a **schema-valid prediction**, not visual verification of every extracted field. A schema-valid result has the required JSON shape, permitted fields and types, and has passed Receipty’s deterministic parsing and post-processing rules. It can be safely consumed by software, but it can still be wrong about what the source image or text visibly contained.
+Receipty guarantees a **schema-valid prediction**, not visual verification of every extracted field. A schema-valid result has the required JSON shape, permitted fields and types, and has passed Receipty’s deterministic parsing and post-processing rules. Software can consume it safely as a typed object; it can still be wrong about what the source image or text visibly contained.
 
-An **evidence-grounded** result would require proof that each returned value is supported by the receipt itself. Receipty does not make that claim today: model output is a prediction, not a citation or a human verification step. Use labeled evaluation fixtures to measure accuracy, and require human review before high-stakes use such as accounting, payment, reimbursement, or tax decisions.
+An **evidence-grounded** result would require proof that each returned value is supported by the receipt itself. Receipty does not make that claim: model output is a prediction, not a citation. Use labeled fixtures to measure accuracy, and require human review before accounting, payment, reimbursement, or tax decisions.
 
 | Outcome | What Receipty has established | What it does not establish |
 | --- | --- | --- |
 | `success` | The model identified a receipt, and the final total and currency passed validation rules. | That every returned field is visibly supported by the source or factually correct. |
-| `needs_review` | The input looks like a receipt, but a required money value is missing, ambiguous, invalid, or conservatively flagged. | That absent values should be guessed or inferred without review. |
-| `not_receipt` | The model or post-rules concluded that the input is not a receipt; receipt fields are cleared. | That the input has no business value for any other workflow. |
-| `extraction_failed` | No usable structured model response was available. | Why the provider failed, or that retrying will definitely succeed. |
+| `needs_review` | The input looks like a receipt, but a required money value is missing, ambiguous, invalid, or conservatively flagged. | That absent values should be guessed without review. |
+| `not_receipt` | The model or post-rules concluded that the input is not a receipt; receipt fields are cleared. | That the input has no value for any other workflow. |
+| `extraction_failed` | No usable structured model response was available (empty content, invalid JSON, or schema violation). | Why the provider failed, or that retrying will succeed. |
 
-## Layout
+## Architecture
+
+```
+Dashboard / curl
+        │
+        ▼
+ FastAPI  (X-Request-ID, MIME + size gates)
+        │
+        ▼
+ ExtractionService
+        │  system prompt + text | image_url
+        ▼
+ OpenRouterProvider
+   • strict json_schema (receipt_extraction)
+   • require_parameters
+   • retries, jitter, deadline
+        │
+        ▼
+ ReceiptLLMOutput  →  ReceiptExtract
+   Pydantic v2, extra=forbid, money/date parsers
+        │
+        ▼
+ apply_postprocess  (scrub / infer currency / outcomes)
+        │
+        ├──► ReceiptRepository (SQLite)
+        └──► UsageLogger (JSONL cost)
+```
 
 ```
 app/
-  api/            HTTP routes + DI
-  core/           settings, domain errors
-  domain/         ReceiptExtract schema
-  llm/            OpenRouter client + prompt
-  services/       extraction + postprocess
-  repository/     SQLite
+  api/            HTTP routes, DI, provider-error → HTTP mapping
+  core/           settings, typed provider exceptions
+  domain/         Outcome, ReceiptLLMOutput, ReceiptExtract, parsers
+  llm/            OpenRouter client + extraction prompt
+  services/       ExtractionService, postprocess
+  repository/     SQLite ledger
   observability/  per-call cost JSONL
-  static/         scan-deck dashboard (multi-upload board)
-evals/            fixtures, labels, scoring
+  static/         scan-deck dashboard
+evals/            fixtures, gold labels, runner, scoring
 tests/            unit + API (mocked provider)
 ```
 
-Request flow: `routes` → `ExtractionService` → OpenRouter → validate → postprocess → `ReceiptRepository`.
+## Extraction pipeline
+
+**Prompt** (`app/llm/prompts.py`): extract a purchase receipt; if it is not a receipt, set `is_receipt=false` and null the rest; copy visible merchant / total / date / tax exactly; never invent; unreadable fields are `null`; JSON only.
+
+**Structured output** (`app/llm/provider.py`): every completion requests
+
+```json
+{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "receipt_extraction",
+    "strict": true,
+    "schema": { "...ReceiptLLMOutput..." }
+  }
+}
+```
+
+plus OpenRouter `provider.require_parameters: true`. The SDK’s own retries are off (`max_retries=0`) so backoff, timeouts, and billing/rate-limit mapping live in one place.
+
+**Fail closed** (`app/services/extraction.py`): missing message content or `ValidationError` becomes `is_receipt=false`, `outcome=extraction_failed`. Markdown fences are stripped as a defensive fallback; they are not a license to invent fields.
+
+**Post-rules** (`app/services/postprocess.py` + `ReceiptExtract._resolve_outcome`):
+
+- Not a receipt → clear merchant, total, currency, date, tax; outcome `not_receipt` (unless already `extraction_failed`).
+- Receipt with `total is None`, missing currency, or `total < 0` → `needs_review`.
+- Missing currency on text ingest may be filled from unique hints (`EGP` / `LE` / `ج.م`, `USD` / `$`, `EUR` / `€`). Ambiguous mixed hints stay `null`.
+
+## Dashboard
+
+Open [http://localhost:8000/](http://localhost:8000/) after startup.
+
+- **Scan deck** — drag-and-drop or file picker; multiple JPEG / PNG / WebP at once (client concurrency = 3).
+- **Scan queue** — in-flight uploads.
+- **Extraction board** — tickets filterable by all / receipts / needs review / not receipts.
+- **Live pulse** — processed count, receipt rate, review rate, spend by currency.
+- **Cost pulse** — aggregated tokens and USD from `GET /v1/usage`.
+- **Paste text** — same extraction path without an image.
+- Health pill (`GET /health`) and a link to FastAPI `/docs`.
 
 ## Setup
 
@@ -48,8 +144,9 @@ cp .env.example .env   # set OPENROUTER_API_KEY
 python -m uvicorn app.main:app --reload
 ```
 
-Open [http://localhost:8000/](http://localhost:8000/) for the dashboard: drop multiple receipt images, watch the scan queue, and read the extraction board + live pulse analytics.
-Docker / OrbStack:
+Get an OpenRouter key at [openrouter.ai](https://openrouter.ai). The default model is multimodal; if you change `MODEL`, pick one that accepts `image_url`.
+
+### Docker
 
 ```bash
 docker compose up --build
@@ -59,18 +156,24 @@ docker compose down
 docker compose down -v
 ```
 
-Compose stores SQLite in a Docker-managed `receipty_data` volume at `/app/data/receipts.db`. This makes a fresh clone safe: Docker never has to guess whether a missing host path is a file or directory.
+Compose stores SQLite in a Docker-managed `receipty_data` volume at `/app/data/receipts.db` (a missing host file is never mistaken for a directory). Cost logs bind-mount to `./logs`.
 
 ## API
 
 | Method | Path | Body |
 |--------|------|------|
 | GET | `/health` | — |
+| GET | `/` | Dashboard HTML |
 | POST | `/v1/ingest` | JSON `{"text": "..."}` |
-| POST | `/v1/ingest/image` | multipart file (`jpeg` / `png` / `webp`, max ~8MB) |
-| GET | `/v1/receipts` | SQLite ledger |
+| POST | `/v1/ingest/image` | multipart file (`jpeg` / `png` / `webp`, max ~8 MB) |
+| GET | `/v1/receipts` | SQLite ledger (newest first) |
+| GET | `/v1/usage` | Aggregated cost / tokens (last 50 call rows) |
 
-Example:
+Interactive OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs).
+
+Optional `X-Request-ID` (1–64 of `A-Za-z0-9._-`) is echoed on the response and included in provider retry logs; otherwise a UUID is generated.
+
+### Text ingest
 
 ```bash
 curl -s localhost:8000/v1/ingest \
@@ -78,25 +181,60 @@ curl -s localhost:8000/v1/ingest \
   -d '{"text":"Carrefour\nTOTAL 186.50 EGP"}'
 ```
 
-## Design notes
+Example success payload:
 
-- **Never invent totals.** Bad or non-JSON model output becomes `is_receipt=false`, `needs_review=true`.
-- **Post-rules** clear money fields when `is_receipt` is false, force review when `total` is null, and optionally infer currency from text hints (EGP/USD/EUR).
-- **Provider errors** stay out of the service layer; routes map credits / daily-limit / upstream failures / deadline expiry to HTTP 402 / 429 / 502 / 504.
-- **Cost log** at `logs/cost.jsonl` (OpenRouter `usage.cost` when present).
+```json
+{
+  "extract": {
+    "is_receipt": true,
+    "merchant": "Carrefour",
+    "total": "186.50",
+    "currency": "EGP",
+    "date": null,
+    "tax": null,
+    "outcome": "success"
+  }
+}
+```
 
-## Evals
+### Image ingest
 
-20 labeled images under `evals/fixtures/` (`evals/labels.jsonl`). These human labels are the source of truth for the fields the evaluation measures.
+```bash
+curl -s localhost:8000/v1/ingest/image \
+  -F 'file=@evals/fixtures/1131-receipt.jpg'
+```
+
+### Provider errors
+
+| Condition | HTTP |
+| --- | --- |
+| Total provider deadline exhausted | 504 |
+| OpenRouter credits exhausted | 402 |
+| Free-tier daily request cap | 429 |
+| Other upstream / retry exhaustion | 502 |
+| Unsupported MIME | 400 |
+| Image larger than `MAX_IMAGE_BYTES` | 413 |
+
+## Evaluation
+
+20 labeled images under `evals/fixtures/` with gold labels in `evals/labels.jsonl` (15 receipts, 5 non-receipts; one receipt has a null total on purpose). Labels are the source of truth for the fields the harness scores.
 
 ```bash
 python -m evals.run
 # optional: python -m evals.run --json /tmp/eval-report.json
 ```
 
-Scored fields: `is_receipt` and `total` only. Merchant string mismatches still count as OK because OCR/name variance is noisy compared to money. This is evidence for those two fields on this fixture set; it is not evidence-grounding for merchant, date, tax, or all production receipts.
+The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required).
 
-## Tests
+| Metric | Rule |
+| --- | --- |
+| `is_receipt` | Predicted receipt vs gold. `extraction_failed` is always a miss — the system made no classification. |
+| `total` | Exact numeric match, including both-null. |
+| Combined `ok` | Both hits. |
+
+Merchant string mismatches still count as OK: name / OCR variance is noisy compared with money. Scores are evidence for **those two fields on this fixture set**. They are not evidence-grounding for merchant, date, tax, or production traffic.
+
+## Tests and CI
 
 ```bash
 ruff format --check .
@@ -105,18 +243,33 @@ pyright
 pytest --cov
 ```
 
-GitHub Actions runs the same four quality gates for every pull request. No API key is required; the provider is mocked in API tests.
+Coverage fails under 80% (branch coverage on `app/`). GitHub Actions runs the same four gates on every pull request. No API key is required; the provider is mocked.
+
+Covered behavior includes:
+
+- Strict structured-output request shape (`json_schema` + `require_parameters`)
+- Money parsing (US / EU separators, ambiguous three-digit fractions, negatives)
+- Outcomes for success, review, non-receipt scrub, malformed JSON, extra model fields
+- Provider retries, jitter, deadline, non-retryable errors, SDK retries disabled
+- HTTP mapping, request-id propagate/generate, MIME rejection, lifespan close
 
 ## Config
 
 | Env | Default |
 |-----|---------|
 | `OPENROUTER_API_KEY` | (required for live calls) |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `MODEL` | `z-ai/glm-5.3-flash` |
 | `DB_PATH` | `receipts.db` |
 | `COST_LOG_PATH` | `logs/cost.jsonl` |
 | `MAX_IMAGE_BYTES` | `8388608` |
+| `MAX_ATTEMPTS` | `3` |
+| `REQUEST_TIMEOUT_SECONDS` | `60` |
+| `TOTAL_DEADLINE_SECONDS` | `120` |
+| `RETRY_BASE_DELAY_SECONDS` | `1` |
 
 ## Out of scope
 
-Auth, bank sync, guessing missing totals.
+Auth, multi-tenant isolation, bank sync, line-item extraction, RAG / embeddings, classical OCR, fine-tuning, and guessing missing totals.
+
+Apache License 2.0 — see [LICENSE.md](LICENSE.md).
