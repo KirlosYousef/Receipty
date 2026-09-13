@@ -7,6 +7,19 @@ If the total is missing or unreadable, the API returns `total: null` and `needs_
 
 Expense tools fail quietly when a model hallucinates a total. Receipty treats extraction as a constrained pipeline: model JSON → Pydantic validation → deterministic post-rules → SQLite ledger, with a small labeled eval set on the same code path.
 
+## Truthful extraction contract
+
+Receipty guarantees a **schema-valid prediction**, not visual verification of every extracted field. A schema-valid result has the required JSON shape, permitted fields and types, and has passed Receipty’s deterministic parsing and post-processing rules. It can be safely consumed by software, but it can still be wrong about what the source image or text visibly contained.
+
+An **evidence-grounded** result would require proof that each returned value is supported by the receipt itself. Receipty does not make that claim today: model output is a prediction, not a citation or a human verification step. Use labeled evaluation fixtures to measure accuracy, and require human review before high-stakes use such as accounting, payment, reimbursement, or tax decisions.
+
+| Outcome | What Receipty has established | What it does not establish |
+| --- | --- | --- |
+| `success` | The model identified a receipt, and the final total and currency passed validation rules. | That every returned field is visibly supported by the source or factually correct. |
+| `needs_review` | The input looks like a receipt, but a required money value is missing, ambiguous, invalid, or conservatively flagged. | That absent values should be guessed or inferred without review. |
+| `not_receipt` | The model or post-rules concluded that the input is not a receipt; receipt fields are cleared. | That the input has no business value for any other workflow. |
+| `extraction_failed` | No usable structured model response was available. | Why the provider failed, or that retrying will definitely succeed. |
+
 ## Layout
 
 ```
@@ -74,14 +87,14 @@ curl -s localhost:8000/v1/ingest \
 
 ## Evals
 
-20 labeled images under `evals/fixtures/` (`evals/labels.jsonl`).
+20 labeled images under `evals/fixtures/` (`evals/labels.jsonl`). These human labels are the source of truth for the fields the evaluation measures.
 
 ```bash
 python -m evals.run
 # optional: python -m evals.run --json /tmp/eval-report.json
 ```
 
-Scored fields: `is_receipt` and `total` only. Merchant string mismatches still count as OK—OCR/name variance is noisy compared to money.
+Scored fields: `is_receipt` and `total` only. Merchant string mismatches still count as OK because OCR/name variance is noisy compared to money. This is evidence for those two fields on this fixture set; it is not evidence-grounding for merchant, date, tax, or all production receipts.
 
 ## Tests
 
