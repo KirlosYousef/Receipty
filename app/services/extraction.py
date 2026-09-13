@@ -47,7 +47,6 @@ class ExtractionService:
             request_id=request_id,
         )
 
-
     def extract_from_image(
         self,
         image_bytes: bytes,
@@ -58,9 +57,10 @@ class ExtractionService:
         data_url = f"data:{mime};base64,{base64.b64encode(image_bytes).decode()}"
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": EXTRACTION_PROMPT},
-            {"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": data_url}}
-            ]},
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "image_url": {"url": data_url}}],
+            },
         ]
         return self._run(
             messages,
@@ -89,9 +89,7 @@ class ExtractionService:
                 _strip_json_fences(content)
             )
 
-            row = ReceiptExtract.model_validate(
-                llm_output.model_dump()
-            )
+            row = ReceiptExtract.model_validate(llm_output.model_dump())
         except ValidationError:
             # Refuse to invent fields when the model returns garbage JSON.
             log.warning("bad model json: %s", content[:300])

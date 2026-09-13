@@ -1,8 +1,8 @@
-fastapi>=0.115.0
-uvicorn>=0.32.0
-openai>=1.60.0
-pydantic>=2.10.0
-pydantic-settings>=2.7.0
-python-dotenv>=1.0.0
-python-multipart>=0.0.18
-httpx>=0.28.0
+fastapi==0.141.1
+uvicorn==0.52.4
+openai==3.6.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+python-multipart==0.0.32
+httpx==0.28.1

@@ -54,6 +54,8 @@ class ReceiptRepository:
                 ),
             )
             conn.commit()
+            if cur.lastrowid is None:
+                raise RuntimeError("SQLite did not return an inserted receipt ID")
             return int(cur.lastrowid)
         finally:
             conn.close()

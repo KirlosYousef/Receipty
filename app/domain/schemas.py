@@ -1,10 +1,17 @@
+import re
 from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-import re
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
 
 class Outcome(str, Enum):
     success = "success"
@@ -49,6 +56,7 @@ def _money(v):
 
     return token
 
+
 class ReceiptLLMOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -59,6 +67,7 @@ class ReceiptLLMOutput(BaseModel):
     date: str | None
     tax: str | None
 
+
 class ReceiptExtract(BaseModel):
     is_receipt: bool
     merchant: str | None = None
@@ -67,7 +76,7 @@ class ReceiptExtract(BaseModel):
     date: Date | None = None
     tax: Decimal | None = Field(default=None, decimal_places=2)
     outcome: Outcome | None = None
-    
+
     @field_validator("total", "tax", mode="before")
     @classmethod
     def money_number_only(cls, v):
@@ -100,16 +109,11 @@ class ReceiptExtract(BaseModel):
         if self.outcome is None:
             if not self.is_receipt:
                 self.outcome = Outcome.not_receipt
-            elif (
-                self.total is None
-                or self.currency is None
-                or self.total < 0
-            ):
+            elif self.total is None or self.currency is None or self.total < 0:
                 self.outcome = Outcome.needs_review
             else:
                 self.outcome = Outcome.success
         return self
-
 
 
 class IngestTextRequest(BaseModel):

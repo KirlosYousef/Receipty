@@ -1,7 +1,5 @@
 from types import SimpleNamespace
 
-from openai import completions
-
 from app.core.config import Settings
 from app.domain.schemas import ReceiptLLMOutput
 from app.llm.provider import OpenRouterProvider
@@ -20,19 +18,15 @@ def test_provider_requests_strict_receipt_schema():
     completions = CapturingCompletions()
 
     provider = OpenRouterProvider(
-        settings = Settings(
+        settings=Settings(
             openrouter_api_key="test-key",
             request_timeout_seconds=25,
         )
     )
 
-    provider._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=completions)
-    )
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
-    provider.complete(
-        [{"role": "user", "content": "Extract this receipt"}]
-    )
+    provider.complete([{"role": "user", "content": "Extract this receipt"}])
 
     response_format = completions.kwargs["response_format"]
 
@@ -41,12 +35,6 @@ def test_provider_requests_strict_receipt_schema():
     assert response_format["json_schema"]["name"] == "receipt_extraction"
     assert response_format["json_schema"]["strict"] is True
     assert (
-        response_format["json_schema"]["schema"]
-        == ReceiptLLMOutput.model_json_schema()
+        response_format["json_schema"]["schema"] == ReceiptLLMOutput.model_json_schema()
     )
-    assert (
-        completions.kwargs["extra_body"]["provider"]["require_parameters"]
-        is True
-    )
-
-
+    assert completions.kwargs["extra_body"]["provider"]["require_parameters"] is True

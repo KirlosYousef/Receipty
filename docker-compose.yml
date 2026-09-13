@@ -4,6 +4,12 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      DB_PATH: /app/data/receipts.db
+      COST_LOG_PATH: /app/logs/cost.jsonl
     volumes:
-      - ./receipts.db:/app/receipts.db
+      - receipty_data:/app/data
       - ./logs:/app/logs
+
+volumes:
+  receipty_data:

@@ -52,6 +52,7 @@ def test_negative_total_needs_review():
     assert row.total == Decimal("-50.00")
     assert row.outcome == Outcome.needs_review
 
+
 def test_ambiguous_single_separator_needs_review():
     row = ReceiptExtract(
         is_receipt=True,
@@ -62,6 +63,7 @@ def test_ambiguous_single_separator_needs_review():
 
     assert row.total is None
     assert row.outcome == Outcome.needs_review
+
 
 def test_apple_store_total_does_not_become_extraction_failure():
     provider = FakeProvider(
