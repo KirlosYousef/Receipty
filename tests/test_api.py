@@ -1,20 +1,14 @@
-import pytest
-
 from pathlib import Path
 from types import SimpleNamespace
-
-from fastapi.testclient import TestClient
-
 from uuid import UUID
 
-from app.api.deps import get_extraction_service
+import pytest
+from fastapi.testclient import TestClient
+
 from app.api.routes import _map_provider_error
 from app.core.config import Settings
 from app.core.exceptions import ProviderDeadlineExceeded
-from app.domain.schemas import Outcome
 from app.main import create_app
-from app.repository.receipts import ReceiptRepository
-from app.services.extraction import ExtractionService
 
 
 class FakeProvider:
@@ -22,17 +16,12 @@ class FakeProvider:
         self.content = content
         self.request_ids: list[str | None] = []
 
-
     def complete(self, messages, *, request_id=None):
         self.request_ids.append(request_id)
 
         return SimpleNamespace(
             model="fake",
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content=self.content)
-                )
-            ],
+            choices=[SimpleNamespace(message=SimpleNamespace(content=self.content))],
             usage=SimpleNamespace(
                 prompt_tokens=1,
                 completion_tokens=1,
@@ -75,7 +64,7 @@ def client(tmp_path: Path):
 
     with TestClient(app) as test_client:
         yield test_client
-    
+
 
 def test_health(client: TestClient):
     r = client.get("/health")
@@ -143,6 +132,7 @@ def test_incoming_request_id_is_preserved(client: TestClient):
 
     assert response.headers["X-Request-ID"] == "client-request-123"
 
+
 def test_ingest_propagates_request_id(client: TestClient):
     response = client.post(
         "/v1/ingest",
@@ -152,15 +142,11 @@ def test_ingest_propagates_request_id(client: TestClient):
 
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == "ingest-request-123"
-    assert client.app.state.test_provider.request_ids == [
-        "ingest-request-123"
-    ]
+    assert client.app.state.test_provider.request_ids == ["ingest-request-123"]
 
 
 def test_provider_deadline_maps_to_gateway_timeout():
-    error = _map_provider_error(
-        ProviderDeadlineExceeded("Provider deadline exhausted")
-    )
+    error = _map_provider_error(ProviderDeadlineExceeded("Provider deadline exhausted"))
 
     assert error.status_code == 504
     assert error.detail == "Provider deadline exhausted"

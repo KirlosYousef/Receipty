@@ -3,20 +3,27 @@ from __future__ import annotations
 import logging
 import random
 import time
-from typing import Any, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol, cast
 
 from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
+from openai.types.chat import ChatCompletionMessageParam
 
 from app.core.config import Settings
-from app.core.exceptions import CreditsExhausted, DailyLimitReached, ProviderDeadlineExceeded, ProviderError
+from app.core.exceptions import (
+    CreditsExhausted,
+    DailyLimitReached,
+    ProviderDeadlineExceeded,
+    ProviderError,
+)
 from app.domain.schemas import ReceiptLLMOutput
-
-from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
+
 def _full_jitter(maximum: float) -> float:
     return random.uniform(0, maximum)
+
 
 class LLMProvider(Protocol):
     def complete(
@@ -28,36 +35,36 @@ class LLMProvider(Protocol):
 
     def close(self) -> None: ...
 
+
 class OpenRouterProvider:
     def __init__(
-            self,
-            settings: Settings,
-            *,
-            sleep_fn: Callable[[float], None] | None = None,
-            jitter_fn: Callable[[float], float] | None = None,
-            clock: Callable[[], float] | None = None,
-        ):
-            if not settings.openrouter_api_key:
-                raise ProviderError("OPENROUTER_API_KEY is not set")
+        self,
+        settings: Settings,
+        *,
+        sleep_fn: Callable[[float], None] | None = None,
+        jitter_fn: Callable[[float], float] | None = None,
+        clock: Callable[[], float] | None = None,
+    ):
+        if not settings.openrouter_api_key:
+            raise ProviderError("OPENROUTER_API_KEY is not set")
 
-            self._settings = settings
-            self._sleep = sleep_fn or time.sleep
-            self._jitter = jitter_fn or _full_jitter
-            self._clock = clock or time.monotonic
+        self._settings = settings
+        self._sleep = sleep_fn or time.sleep
+        self._jitter = jitter_fn or _full_jitter
+        self._clock = clock or time.monotonic
 
-            self._client = OpenAI(
-                base_url=settings.openrouter_base_url,
-                api_key=settings.openrouter_api_key,
-                max_retries=0,
-            )
-    
+        self._client = OpenAI(
+            base_url=settings.openrouter_base_url,
+            api_key=settings.openrouter_api_key,
+            max_retries=0,
+        )
+
     def complete(
         self,
         messages: list[dict[str, Any]],
         *,
         request_id: str | None = None,
     ) -> Any:
-        delay = 1.0
         started_at = self._clock()
         last: BaseException | None = None
 
@@ -76,7 +83,7 @@ class OpenRouterProvider:
             try:
                 return self._client.chat.completions.create(
                     model=self._settings.model,
-                    messages=messages,
+                    messages=cast(list[ChatCompletionMessageParam], messages),
                     response_format={
                         "type": "json_schema",
                         "json_schema": {
@@ -90,8 +97,7 @@ class OpenRouterProvider:
                             "require_parameters": True,
                         }
                     },
-                timeout=attempt_timeout,
-
+                    timeout=attempt_timeout,
                 )
             except RateLimitError as e:
                 msg = str(e)
@@ -120,10 +126,7 @@ class OpenRouterProvider:
                 )
                 raise ProviderError(str(last)) from last
 
-            delay_cap = (
-                self._settings.retry_base_delay_seconds
-                * (2 ** (attempt - 1))
-            )
+            delay_cap = self._settings.retry_base_delay_seconds * (2 ** (attempt - 1))
             delay = self._jitter(delay_cap)
 
             elapsed = self._clock() - started_at
@@ -141,7 +144,6 @@ class OpenRouterProvider:
                 type(last).__name__,
             )
             self._sleep(min(delay, remaining))
-
 
         if last is None:
             raise ProviderError("complete() failed with no exception")

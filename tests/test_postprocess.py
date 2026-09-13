@@ -37,6 +37,8 @@ def test_missing_total_forces_review():
 
 
 def test_currency_inferred_when_missing():
-    row = ReceiptExtract(is_receipt=True, merchant="Shop", total=Decimal("1.00"), currency=None)
+    row = ReceiptExtract(
+        is_receipt=True, merchant="Shop", total=Decimal("1.00"), currency=None
+    )
     out = apply_postprocess(row, "TOTAL 1.00 EGP")
     assert out.currency == "EGP"

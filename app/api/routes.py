@@ -88,7 +88,13 @@ def usage(settings: Settings = Depends(get_settings)) -> dict:
     """Return aggregated cost/token usage from the JSONL log."""
     log_path = settings.cost_log_path
     if not log_path.exists():
-        return {"total_calls": 0, "total_usd": 0, "total_prompt_tokens": 0, "total_completion_tokens": 0, "calls": []}
+        return {
+            "total_calls": 0,
+            "total_usd": 0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "calls": [],
+        }
 
     calls: list[dict] = []
     total_usd = 0.0

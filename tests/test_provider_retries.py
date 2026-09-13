@@ -1,17 +1,19 @@
-from types import SimpleNamespace
-
 import logging
+from collections.abc import Callable
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from openai import APIConnectionError, APIStatusError, RateLimitError
 
-from collections.abc import Callable
-
 from app.core.config import Settings
-from app.core.exceptions import ProviderError
+from app.core.exceptions import (
+    CreditsExhausted,
+    DailyLimitReached,
+    ProviderDeadlineExceeded,
+    ProviderError,
+)
 from app.llm.provider import OpenRouterProvider
-from app.core.exceptions import ProviderDeadlineExceeded, CreditsExhausted, DailyLimitReached
 
 
 class AlwaysConnectionError:
@@ -45,17 +47,14 @@ def test_connection_error_uses_exact_attempt_limit_without_real_sleep():
         clock=lambda: 0.0,
     )
 
-    provider._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=completions)
-    )
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
     with pytest.raises(ProviderError):
-        provider.complete(
-            [{"role": "user", "content": "receipt"}]
-        )
+        provider.complete([{"role": "user", "content": "receipt"}])
 
     assert completions.calls == 3
     assert sleep_delays == [0.5, 1.0]
+
 
 class FakeTime:
     def __init__(self):
@@ -89,18 +88,14 @@ def test_total_deadline_caps_retries_and_sleep():
         clock=fake_time.clock,
     )
 
-    provider._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=completions)
-    )
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
     with pytest.raises(ProviderDeadlineExceeded):
-        provider.complete(
-            [{"role": "user", "content": "receipt"}]
-        )
+        provider.complete([{"role": "user", "content": "receipt"}])
 
     assert completions.calls == 2
     assert fake_time.sleeps == [1.0, 0.5]
-    
+
 
 class AlwaysRaises:
     def __init__(self, error_factory: Callable[[], Exception]):
@@ -171,23 +166,17 @@ def test_non_retryable_errors_fail_after_one_attempt(
         clock=lambda: 0.0,
     )
 
-    provider._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=completions)
-    )
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
     with pytest.raises(expected_error):
-        provider.complete(
-            [{"role": "user", "content": "receipt"}]
-        )
+        provider.complete([{"role": "user", "content": "receipt"}])
 
     assert completions.calls == 1
     assert sleep_delays == []
 
 
 def test_server_errors_retry_until_attempt_limit():
-    completions = AlwaysRaises(
-        lambda: status_error(500, "Server error")
-    )
+    completions = AlwaysRaises(lambda: status_error(500, "Server error"))
     sleep_delays: list[float] = []
 
     provider = OpenRouterProvider(
@@ -200,14 +189,10 @@ def test_server_errors_retry_until_attempt_limit():
         clock=lambda: 0.0,
     )
 
-    provider._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=completions)
-    )
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
     with pytest.raises(ProviderError):
-        provider.complete(
-            [{"role": "user", "content": "receipt"}]
-        )
+        provider.complete([{"role": "user", "content": "receipt"}])
 
     assert completions.calls == 3
     assert sleep_delays == [1.0, 2.0]
@@ -225,9 +210,7 @@ def test_sdk_retries_are_disabled(monkeypatch):
         FakeOpenAI,
     )
 
-    OpenRouterProvider(
-        Settings(openrouter_api_key="test-key")
-    )
+    OpenRouterProvider(Settings(openrouter_api_key="test-key"))
 
     assert captured["max_retries"] == 0
 
@@ -240,9 +223,7 @@ def test_retry_log_includes_request_id(caplog):
         jitter_fn=lambda maximum: 0.0,
         clock=lambda: 0.0,
     )
-    provider._client = SimpleNamespace(
-        chat=SimpleNamespace(completions=completions)
-    )
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
     with caplog.at_level(logging.WARNING, logger="app.llm.provider"):
         with pytest.raises(ProviderError):

@@ -36,11 +36,17 @@ python -m uvicorn app.main:app --reload
 ```
 
 Open [http://localhost:8000/](http://localhost:8000/) for the dashboard: drop multiple receipt images, watch the scan queue, and read the extraction board + live pulse analytics.
-Docker:
+Docker / OrbStack:
 
 ```bash
 docker compose up --build
+# stop while keeping local receipt data
+docker compose down
+# reset the local database completely
+docker compose down -v
 ```
+
+Compose stores SQLite in a Docker-managed `receipty_data` volume at `/app/data/receipts.db`. This makes a fresh clone safe: Docker never has to guess whether a missing host path is a file or directory.
 
 ## API
 
@@ -63,7 +69,7 @@ curl -s localhost:8000/v1/ingest \
 
 - **Never invent totals.** Bad or non-JSON model output becomes `is_receipt=false`, `needs_review=true`.
 - **Post-rules** clear money fields when `is_receipt` is false, force review when `total` is null, and optionally infer currency from text hints (EGP/USD/EUR).
-- **Provider errors** stay out of the service layer; routes map credits / daily-limit / upstream failures to HTTP 402 / 429 / 502.
+- **Provider errors** stay out of the service layer; routes map credits / daily-limit / upstream failures / deadline expiry to HTTP 402 / 429 / 502 / 504.
 - **Cost log** at `logs/cost.jsonl` (OpenRouter `usage.cost` when present).
 
 ## Evals
@@ -80,10 +86,13 @@ Scored fields: `is_receipt` and `total` only. Merchant string mismatches still c
 ## Tests
 
 ```bash
-pytest -q
+ruff format --check .
+ruff check .
+pyright
+pytest --cov
 ```
 
-No API key required; the provider is mocked in API tests.
+GitHub Actions runs the same four quality gates for every pull request. No API key is required; the provider is mocked in API tests.
 
 ## Config
 

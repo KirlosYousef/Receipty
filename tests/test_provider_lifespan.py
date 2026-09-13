@@ -1,8 +1,7 @@
-import pytest
-
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
@@ -83,6 +82,7 @@ def test_provider_is_reused_and_closed(tmp_path: Path):
         assert provider.closed is False
 
     assert provider.closed is True
+
 
 def test_missing_api_key_fails_during_startup(tmp_path: Path):
     settings = Settings(
