@@ -19,7 +19,13 @@ def _full_jitter(maximum: float) -> float:
     return random.uniform(0, maximum)
 
 class LLMProvider(Protocol):
-    def complete(self, messages: list[dict[str, Any]]) -> Any: ...
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        request_id: str | None = None,
+    ) -> Any: ...
+
     def close(self) -> None: ...
 
 class OpenRouterProvider:
@@ -45,7 +51,12 @@ class OpenRouterProvider:
                 max_retries=0,
             )
     
-    def complete(self, messages: list[dict[str, Any]]) -> Any:
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        request_id: str | None = None,
+    ) -> Any:
         delay = 1.0
         started_at = self._clock()
         last: BaseException | None = None
@@ -100,10 +111,14 @@ class OpenRouterProvider:
                 last = e
 
             if attempt == self._settings.max_attempts:
-                raise ProviderDeadlineExceeded(
-                    "Provider deadline exhausted after max attempts"
+                log.error(
+                    "provider_failed request_id=%s attempt=%s max_attempts=%s error=%s",
+                    request_id,
+                    attempt,
+                    self._settings.max_attempts,
+                    type(last).__name__,
                 )
-                break
+                raise ProviderError(str(last)) from last
 
             delay_cap = (
                 self._settings.retry_base_delay_seconds
@@ -115,8 +130,16 @@ class OpenRouterProvider:
             remaining = self._settings.total_deadline_seconds - elapsed
 
             if remaining <= 0:
-                raise ProviderError("Provider deadline exhausted")
+                raise ProviderDeadlineExceeded("Provider deadline exhausted")
 
+            log.warning(
+                "provider_retry request_id=%s attempt=%s max_attempts=%s delay_seconds=%.3f error=%s",
+                request_id,
+                attempt,
+                self._settings.max_attempts,
+                delay,
+                type(last).__name__,
+            )
             self._sleep(min(delay, remaining))
 
 

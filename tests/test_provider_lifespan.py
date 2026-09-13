@@ -15,7 +15,7 @@ class FakeProvider:
         self.calls = 0
         self.closed = False
 
-    def complete(self, messages):
+    def complete(self, messages, *, request_id=None):
         self.calls += 1
 
         return SimpleNamespace(

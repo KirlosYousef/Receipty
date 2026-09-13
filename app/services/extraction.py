@@ -30,14 +30,31 @@ class ExtractionService:
         self._provider = provider
         self._usage = usage
 
-    def extract_from_text(self, text: str) -> ReceiptExtract:
+    def extract_from_text(
+        self,
+        text: str,
+        *,
+        request_id: str | None = None,
+    ) -> ReceiptExtract:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": EXTRACTION_PROMPT},
             {"role": "user", "content": text},
         ]
-        return self._run(messages, currency_hint=text, kind="text")
+        return self._run(
+            messages,
+            currency_hint=text,
+            kind="text",
+            request_id=request_id,
+        )
 
-    def extract_from_image(self, image_bytes: bytes, mime: str) -> ReceiptExtract:
+
+    def extract_from_image(
+        self,
+        image_bytes: bytes,
+        mime: str,
+        *,
+        request_id: str | None = None,
+    ) -> ReceiptExtract:
         data_url = f"data:{mime};base64,{base64.b64encode(image_bytes).decode()}"
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": EXTRACTION_PROMPT},
@@ -45,7 +62,12 @@ class ExtractionService:
                 {"type": "image_url", "image_url": {"url": data_url}}
             ]},
         ]
-        return self._run(messages, currency_hint=mime, kind="image")
+        return self._run(
+            messages,
+            currency_hint=mime,
+            kind="image",
+            request_id=request_id,
+        )
 
     def _run(
         self,
@@ -53,8 +75,12 @@ class ExtractionService:
         *,
         currency_hint: str,
         kind: str,
+        request_id: str | None = None,
     ) -> ReceiptExtract:
-        completion = self._provider.complete(messages)
+        completion = self._provider.complete(
+            messages,
+            request_id=request_id,
+        )
         content = completion.choices[0].message.content
         if content is None:
             return ReceiptExtract(is_receipt=False, outcome=Outcome.extraction_failed)
