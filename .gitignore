@@ -1,27 +1,27 @@
+# Environments and secrets
+.env
+.venv/
+venv/
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-.Python
-.venv/
-venv/
-.env
-*.egg-info/
-dist/
-build/
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .coverage
 htmlcov/
-reports/ 
+.pyright/
+.ruff_cache/
 
-# App runtime
-receipts.db
+# Runtime data
+data/
 logs/
+*.db
 
-# OS / IDE
+# OS / editors
 .DS_Store
-.idea/
 .vscode/
-*.swp
+.idea/
+
+# Local evaluation artifacts
+reports/
+*.eval-report.json
