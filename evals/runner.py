@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.domain.schemas import Outcome
 from app.llm.provider import OpenRouterProvider
 from app.observability.usage import UsageLogger
 from app.services.extraction import ExtractionService
@@ -65,18 +66,16 @@ def main() -> None:
             continue
 
         scored = score_row(pred, gold)
-        ok_receipt += int(scored["receipt_ok"])
+        ok_receipt += int(scored["receipt_ok"] and (pred.outcome != Outcome.not_receipt))
         ok_total += int(scored["total_ok"])
         flag = "OK" if scored["ok"] else "FAIL"
         print(
-            flag,
-            name,
-            "pred",
-            scored["pred_merchant"],
-            scored["pred_total"],
-            "gold",
-            scored["gold_merchant"],
-            scored["gold_total"],
+            name, "\n",
+            "receipt:", "PASS" if scored["receipt_ok"] else ("FAIL pred:", pred.outcome, "gold:", gold["is_receipt"]), "\n",
+            "merchant:", "PASS" if scored["receipt_ok"] else ("FAIL pred:", scored["pred_merchant"], "gold:", scored["gold_merchant"]), "\n",
+            "total:", "PASS" if scored["total_ok"] else ("FAIL pred:", scored["pred_total"], "gold:", scored["gold_total"]), "\n",
+            "date:", "PASS" if scored["date_ok"] else ("FAIL pred:", scored["pred_date"], "gold:", scored["gold_date"]), "\n",
+            "overall:", "PASS" if scored["ok"] else "FAIL", "\n",
         )
         rows.append({"file": name, **scored})
 

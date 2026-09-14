@@ -98,6 +98,8 @@ class OpenRouterProvider:
                         }
                     },
                     timeout=attempt_timeout,
+                    temperature=self._settings.temperature,
+                    seed=self._settings.seed,
                 )
             except RateLimitError as e:
                 msg = str(e)

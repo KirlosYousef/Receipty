@@ -234,3 +234,37 @@ def test_retry_log_includes_request_id(caplog):
 
     assert "provider_retry" in caplog.text
     assert "request_id=request-123" in caplog.text
+
+
+def test_temperature_and_seed_are_passed_to_provider():
+    captured: dict = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            raise APIConnectionError(
+                request=httpx.Request(
+                    "POST",
+                    "https://openrouter.ai/api/v1/chat/completions",
+                )
+            )
+
+    provider = OpenRouterProvider(
+        Settings(
+            openrouter_api_key="test-key",
+            temperature=0.7,
+            seed=123,
+        ),
+        sleep_fn=lambda _: None,
+        jitter_fn=lambda maximum: 0.0,
+        clock=lambda: 0.0,
+    )
+    provider._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
+
+    with pytest.raises(ProviderError):
+        provider.complete([{"role": "user", "content": "receipt"}])
+
+    assert captured["temperature"] == 0.7
+    assert captured["seed"] == 123

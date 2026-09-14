@@ -31,11 +31,12 @@ Aimed at AI / applied-ML engineering work: shipping an extraction system rather 
 | Theme | In this repo |
 | --- | --- |
 | **Structured generation** | OpenRouter `response_format` = `json_schema` named `receipt_extraction`, `strict: true`, schema from `ReceiptLLMOutput.model_json_schema()`. `extra_body.provider.require_parameters` so the gateway must honor the schema. Wire model uses `extra="forbid"`. |
-| **Hallucination control** | Prompt: copy visible fields, never invent, null if unreadable. Invalid or fenced JSON → `outcome=extraction_failed` with no invented money fields. |
+| **Hallucination control** | Prompt: copy visible fields, never invent, null if unreadable. Dates must be visibly present — no inferred calendar math. Invalid or fenced JSON → `outcome=extraction_failed` with no invented fields. |
 | **Document / vision LLM** | Image ingest as a `data:{mime};base64,...` `image_url` (JPEG / PNG / WebP, max ~8 MB). Text paste uses the same prompt and post-rules. No classical OCR stack. |
 | **Locale-aware parsing** | `_money()` handles `1,234.56` vs `1.234,56`; a single separator plus three fractional digits is treated as ambiguous and becomes `null`. Dates accept several common formats; unparseable dates become `null`. |
 | **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Currency may be inferred from text hints (EGP / USD / EUR) only when unique. Negative totals need review. |
-| **Evaluation** | 20 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics: `is_receipt` and `total` only. `extraction_failed` is never a correct receipt classification. |
+| **Evaluation** | 21 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics: `is_receipt`, `total`, and `date`. Combined `ok` requires all three. `extraction_failed` is never a correct receipt classification. |
+| **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default so eval runs are comparable. Both are configurable. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
 | **Cost observability** | Per-call prompt/completion tokens and USD → `logs/cost.jsonl`; aggregated on `GET /v1/usage` and the dashboard. |
 | **Testability** | `LLMProvider` protocol + `create_app(provider_factory=...)`. CI runs lint, types, and coverage **without** a live API key. |
@@ -68,6 +69,7 @@ Dashboard / curl
  OpenRouterProvider
    • strict json_schema (receipt_extraction)
    • require_parameters
+   • temperature + seed
    • retries, jitter, deadline
         │
         ▼
@@ -92,12 +94,13 @@ app/
   observability/  per-call cost JSONL
   static/         scan-deck dashboard
 evals/            fixtures, gold labels, runner, scoring
+reports/          JSON eval runs (prompt / scoring snapshots)
 tests/            unit + API (mocked provider)
 ```
 
 ## Extraction pipeline
 
-**Prompt** (`app/llm/prompts.py`): extract a purchase receipt; if it is not a receipt, set `is_receipt=false` and null the rest; copy visible merchant / total / date / tax exactly; never invent; unreadable fields are `null`; JSON only.
+**Prompt** (`app/llm/prompts.py`): extract a purchase receipt; if it is not a receipt, set `is_receipt=false` and null the rest; copy visible merchant / total / date / tax exactly; never invent; unreadable fields are `null`. Transaction dates are extracted when visibly readable — including `5/26/2016`, `05/26/2016`, `2016-05-26`, `06Aug'16`, and month-name forms — then returned as `YYYY-MM-DD`. Absent, ambiguous, or unreadable dates stay `null`; the model must not infer or fabricate them. JSON only.
 
 **Structured output** (`app/llm/provider.py`): every completion requests
 
@@ -112,7 +115,7 @@ tests/            unit + API (mocked provider)
 }
 ```
 
-plus OpenRouter `provider.require_parameters: true`. The SDK’s own retries are off (`max_retries=0`) so backoff, timeouts, and billing/rate-limit mapping live in one place.
+plus OpenRouter `provider.require_parameters: true`. Completions also send `temperature` (default `0.0`) and `seed` (default `42`) so extraction is as deterministic as the provider allows. The SDK’s own retries are off (`max_retries=0`) so backoff, timeouts, and billing/rate-limit mapping live in one place.
 
 **Fail closed** (`app/services/extraction.py`): missing message content or `ValidationError` becomes `is_receipt=false`, `outcome=extraction_failed`. Markdown fences are stripped as a defensive fallback; they are not a license to invent fields.
 
@@ -217,22 +220,23 @@ curl -s localhost:8000/v1/ingest/image \
 
 ## Evaluation
 
-20 labeled images under `evals/fixtures/` with gold labels in `evals/labels.jsonl` (15 receipts, 5 non-receipts; one receipt has a null total on purpose). Labels are the source of truth for the fields the harness scores.
+21 labeled images under `evals/fixtures/` with gold labels in `evals/labels.jsonl` (16 receipts, 5 non-receipts; one receipt has a null total on purpose). Labels are the source of truth for the fields the harness scores.
 
 ```bash
 python -m evals.run
-# optional: python -m evals.run --json /tmp/eval-report.json
+# optional: python -m evals.run --json reports/latest.json
 ```
 
-The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required).
+The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Per-file output covers receipt, total, and date; merchant is printed for inspection but is not a scored field.
 
 | Metric | Rule |
 | --- | --- |
 | `is_receipt` | Predicted receipt vs gold. `extraction_failed` is always a miss — the system made no classification. |
 | `total` | Exact numeric match, including both-null. |
-| Combined `ok` | Both hits. |
+| `date` | Exact `YYYY-MM-DD` match against the gold label, including both-null. |
+| Combined `ok` | All three hits. |
 
-Merchant string mismatches still count as OK: name / OCR variance is noisy compared with money. Scores are evidence for **those two fields on this fixture set**. They are not evidence-grounding for merchant, date, tax, or production traffic.
+Merchant string mismatches still count as OK: name / OCR variance is noisy compared with money and dates. Scores are evidence for **`is_receipt`, `total`, and `date` on this fixture set**. They are not evidence-grounding for merchant, tax, currency, or production traffic.
 
 ## Tests and CI
 
@@ -248,6 +252,7 @@ Coverage fails under 80% (branch coverage on `app/`). GitHub Actions runs the sa
 Covered behavior includes:
 
 - Strict structured-output request shape (`json_schema` + `require_parameters`)
+- Temperature and seed forwarded to the provider
 - Money parsing (US / EU separators, ambiguous three-digit fractions, negatives)
 - Outcomes for success, review, non-receipt scrub, malformed JSON, extra model fields
 - Provider retries, jitter, deadline, non-retryable errors, SDK retries disabled
@@ -260,6 +265,8 @@ Covered behavior includes:
 | `OPENROUTER_API_KEY` | (required for live calls) |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `MODEL` | `z-ai/glm-5.3-flash` |
+| `TEMPERATURE` | `0.0` |
+| `SEED` | `42` |
 | `DB_PATH` | `receipts.db` |
 | `COST_LOG_PATH` | `logs/cost.jsonl` |
 | `MAX_IMAGE_BYTES` | `8388608` |
