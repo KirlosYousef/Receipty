@@ -66,16 +66,41 @@ def main() -> None:
             continue
 
         scored = score_row(pred, gold)
-        ok_receipt += int(scored["receipt_ok"] and (pred.outcome != Outcome.not_receipt))
+        ok_receipt += int(
+            scored["receipt_ok"] and (pred.outcome != Outcome.not_receipt)
+        )
         ok_total += int(scored["total_ok"])
-        flag = "OK" if scored["ok"] else "FAIL"
         print(
-            name, "\n",
-            "receipt:", "PASS" if scored["receipt_ok"] else ("FAIL pred:", pred.outcome, "gold:", gold["is_receipt"]), "\n",
-            "merchant:", "PASS" if scored["receipt_ok"] else ("FAIL pred:", scored["pred_merchant"], "gold:", scored["gold_merchant"]), "\n",
-            "total:", "PASS" if scored["total_ok"] else ("FAIL pred:", scored["pred_total"], "gold:", scored["gold_total"]), "\n",
-            "date:", "PASS" if scored["date_ok"] else ("FAIL pred:", scored["pred_date"], "gold:", scored["gold_date"]), "\n",
-            "overall:", "PASS" if scored["ok"] else "FAIL", "\n",
+            name,
+            "\n",
+            "receipt:",
+            "PASS"
+            if scored["receipt_ok"]
+            else ("FAIL pred:", pred.outcome, "gold:", gold["is_receipt"]),
+            "\n",
+            "merchant:",
+            "PASS"
+            if scored["receipt_ok"]
+            else (
+                "FAIL pred:",
+                scored["pred_merchant"],
+                "gold:",
+                scored["gold_merchant"],
+            ),
+            "\n",
+            "total:",
+            "PASS"
+            if scored["total_ok"]
+            else ("FAIL pred:", scored["pred_total"], "gold:", scored["gold_total"]),
+            "\n",
+            "date:",
+            "PASS"
+            if scored["date_ok"]
+            else ("FAIL pred:", scored["pred_date"], "gold:", scored["gold_date"]),
+            "\n",
+            "overall:",
+            "PASS" if scored["ok"] else "FAIL",
+            "\n",
         )
         rows.append({"file": name, **scored})
 

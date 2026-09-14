@@ -18,6 +18,7 @@ def total_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
         return False
     return float(pred.total) == float(gold_total)
 
+
 def date_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
     gold_date = gold.get("date")
     if gold_date is None and pred.date is None:
@@ -38,9 +39,7 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
         "ok": r_ok and t_ok and d_ok,
         "pred_merchant": pred.merchant,
         "pred_total": str(pred.total),
-        "pred_date": str(pred.date)
-        if isinstance(pred.total, Decimal)
-        else pred.total,
+        "pred_date": str(pred.date) if isinstance(pred.total, Decimal) else pred.total,
         "gold_merchant": gold.get("merchant"),
         "gold_total": gold_total_value(gold),
         "gold_date": gold.get("date"),
