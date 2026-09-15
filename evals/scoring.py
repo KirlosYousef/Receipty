@@ -30,6 +30,28 @@ def date_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
     return str(pred.date) == str(gold_date)
 
 
+def merchant_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool | None:
+    """Compare receipt merchant names when the gold label supplies one."""
+    gold_merchant = gold.get("merchant")
+    if not gold.get("is_receipt") or gold_merchant is None:
+        return None
+    return _normalize_text(pred.merchant) == _normalize_text(gold_merchant)
+
+
+def currency_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool | None:
+    """Compare receipt currency only when it was explicitly labelled."""
+    gold_currency = gold.get("currency")
+    if not gold.get("is_receipt") or gold_currency is None:
+        return None
+    return pred.currency == gold_currency
+
+
+def _normalize_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return " ".join(value.split()).casefold()
+
+
 def hallucinated_total(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
     """Gold total is absent/unreadable, but the prediction invented one."""
     return (
@@ -52,18 +74,24 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
     r_ok = receipt_hit(pred, gold)
     t_ok = total_hit(pred, gold)
     d_ok = date_hit(pred, gold)
+    m_ok = merchant_hit(pred, gold)
+    c_ok = currency_hit(pred, gold)
     pred_outcome = pred.outcome.value if pred.outcome is not None else None
     return {
         "receipt_ok": r_ok,
         "total_ok": t_ok,
         "date_ok": d_ok,
+        "merchant_ok": m_ok,
+        "currency_ok": c_ok,
         "ok": r_ok and t_ok and d_ok,
         "hallucinated_total": hallucinated_total(pred, gold),
         "hallucinated_date": hallucinated_date(pred, gold),
         "pred_outcome": pred_outcome,
         "pred_merchant": pred.merchant,
         "pred_total": None if pred.total is None else str(pred.total),
+        "pred_currency": pred.currency,
         "pred_date": None if pred.date is None else str(pred.date),
+        "pred_tax": None if pred.tax is None else str(pred.tax),
         "gold_merchant": gold.get("merchant"),
         "gold_total": gold_total_value(gold),
         "gold_date": gold.get("date"),
@@ -105,6 +133,8 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "latency_ms": _latency_summary([]),
             "tokens": _token_summary([]),
             "cost_usd": _cost_summary([]),
+            "class_conditional": _class_conditional_summary([]),
+            "fields": _field_summaries([]),
         }
 
     receipt_correct = sum(1 for r in scored if r["receipt_ok"])
@@ -164,6 +194,8 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "latency_ms": _latency_summary(latencies),
         "tokens": _token_summary(usage_rows),
         "cost_usd": _cost_summary(costs),
+        "class_conditional": _class_conditional_summary(scored),
+        "fields": _field_summaries(scored),
     }
 
 
@@ -220,3 +252,53 @@ def _cost_summary(values: list[float]) -> dict[str, float | int | None]:
         "sum": round(total, 6),
         "mean": round(total / len(values), 6),
     }
+
+
+def _class_conditional_summary(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        "receipt": _class_summary(
+            [row for row in rows if row.get("gold_is_receipt") is True]
+        ),
+        "non_receipt": _class_summary(
+            [row for row in rows if row.get("gold_is_receipt") is False]
+        ),
+    }
+
+
+def _class_summary(rows: list[dict[str, Any]]) -> dict[str, int | float | None]:
+    return {
+        "n": len(rows),
+        "receipt_accuracy": _accuracy(rows, "receipt_ok"),
+        "total_accuracy": _accuracy(rows, "total_ok"),
+        "date_accuracy": _accuracy(rows, "date_ok"),
+        "combined_accuracy": _accuracy(rows, "ok"),
+    }
+
+
+def _field_summaries(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        "merchant": _field_summary(rows, "merchant_ok"),
+        "currency": _field_summary(rows, "currency_ok"),
+        "tax": {
+            "correct": None,
+            "scored": 0,
+            "accuracy": None,
+            "reason": "labels do not include tax",
+        },
+    }
+
+
+def _field_summary(
+    rows: list[dict[str, Any]], key: str
+) -> dict[str, int | float | None]:
+    scored = [row for row in rows if row.get(key) is not None]
+    correct = sum(1 for row in scored if row[key])
+    return {
+        "correct": correct,
+        "scored": len(scored),
+        "accuracy": _ratio(correct, len(scored)),
+    }
+
+
+def _accuracy(rows: list[dict[str, Any]], key: str) -> float | None:
+    return _ratio(sum(1 for row in rows if row.get(key)), len(rows))

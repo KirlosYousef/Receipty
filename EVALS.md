@@ -9,8 +9,9 @@ Receipty extracts structured receipt fields from image inputs. The evaluation su
 - Fixtures: 60 labeled images in `evals/fixtures/` (55 receipts, 5 non-receipts)
 - Labels: `evals/labels.jsonl` (human-curated, not model-generated)
 - Coverage and provenance: `evals/fixture_manifest.json`. The 54 receipt fixtures are from the [ExpressExpense Sample Receipt Dataset](https://expressexpense.com/blog/free-receipt-images-ocr-machine-learning-dataset/) (MIT); the five non-receipt fixture sources remain explicitly unverified.
-- Scored fields: receipt classification, total, transaction date
-- Logged, not scored: merchant (printed for inspection; name variance is noisy)
+- Scored fields: receipt classification, total, transaction date, normalized merchant
+- Partially scored: currency, only where its gold label is explicit
+- Unavailable: tax accuracy and `needs_review` precision/recall, because the current labels do not supply tax or expected-review decisions
 - Intentional nulls: one receipt with a missing total; three receipts with missing dates
 - Current limitation: this set is a curated English, high-quality restaurant-receipt snapshot. It does not establish production-wide accuracy, Arabic/English mixed receipts, refunds, repeated totals, prompt-injection resistance, or poor-image robustness.
 
@@ -23,6 +24,8 @@ Implemented in `evals/scoring.py`. Combined `ok` requires all three field hits.
 | Receipt | Predicted receipt vs gold. `extraction_failed` is always a miss — the system made no classification. |
 | Total | Decimal equality, including both-null |
 | Date | Canonical `YYYY-MM-DD` equality, including both-null |
+| Merchant | Receipt-only, case- and whitespace-normalized equality when the gold label exists |
+| Currency | Receipt-only exact ISO value when the gold label exists; unlabelled currencies do not count as correct or incorrect |
 | Overall (`ok`) | Receipt, total, and date all hit |
 | `hallucinated_total` | A receipt's gold total is `null` and prediction total is non-null |
 | `hallucinated_date` | A receipt's gold date is `null` and prediction date is non-null |
@@ -34,6 +37,24 @@ Hallucination rate uses the receipt-only gold-null denominator:
 `hallucinated_total_rate = hallucinated_total_count / gold_null_total_cases`
 
 `null/null` agreement is correct and is **not** a hallucination.
+
+## Quality slices and repeated-run variance
+
+Each report also splits receipt, total, date, and combined accuracy by the
+gold receipt class (`receipt` or `non_receipt`). This avoids allowing a
+well-performing receipt slice to hide weak rejection behavior, or vice versa.
+
+Use two or more runs with matching model, temperature, seed, prompt hash, and
+fixture/label paths to compare live-model variation:
+
+```bash
+python -m evals.compare reports/run-a.json reports/run-b.json --json reports/variance.json
+```
+
+The comparison reports per-run field hits, mean per-run latency, and the files
+whose complete predictions changed. It rejects incompatible configurations or
+fixture sets rather than silently combining them. Commit SHA may differ: a
+comparison can intentionally measure the impact of a code change.
 
 ## Operational metrics
 
