@@ -51,10 +51,27 @@ fixture/label paths to compare live-model variation:
 python -m evals.compare reports/run-a.json reports/run-b.json --json reports/variance.json
 ```
 
-The comparison reports per-run field hits, mean per-run latency, and the files
-whose complete predictions changed. It rejects incompatible configurations or
-fixture sets rather than silently combining them. Commit SHA may differ: a
-comparison can intentionally measure the impact of a code change.
+The comparison reports per-run field hits, mean per-run latency, total tokens,
+total cost, receipt-only hallucination rates, and the files whose complete
+predictions changed. It rejects incompatible configurations or fixture sets
+rather than silently combining them. Commit SHA may differ: a comparison can
+intentionally measure the impact of a code change.
+
+## Prompt and model experiments
+
+The runner selects a versioned prompt, records its version and SHA-256 hash,
+and accepts the model through the existing `MODEL` environment variable. Run
+each candidate against the same fixture set, then compare them explicitly:
+
+```bash
+python -m evals.run --prompt-version extraction-v1 --json reports/v1.json
+python -m evals.run --prompt-version extraction-v2-evidence --json reports/v2.json
+python -m evals.compare --allow-config-differences reports/v1.json reports/v2.json
+```
+
+Use `--allow-config-differences` only for intentional prompt/model experiments.
+It still requires identical fixture and label paths and emits every run's model,
+temperature, seed, prompt version, and prompt hash alongside the results.
 
 ## Operational metrics
 
