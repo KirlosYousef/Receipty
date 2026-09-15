@@ -70,22 +70,19 @@ This is the **best dated run** and the one to cite. Same-day files like `baselin
 
 Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 
-### Three cases to understand from this run
+### Notable cases from this run
 
-There were **no combined `ok` failures** on the authoritative baseline. These three cases still matter:
+There were **no combined `ok` failures** on the authoritative baseline. These cases document the scoring contract:
 
-1. **`1164-receipt.jpg` — unreadable total (contract + report bug)**  
-   Gold total `null`, gold date `2015-08-06`. Scoring said `total_ok` and `date_ok` (model did not invent a total; date matched).  
-   But the JSON report showed `pred_total: "None"` (string) and `pred_date: null` because `score_row` gated date serialization on `isinstance(pred.total, Decimal)`.  
-   Lesson: a bad report DTO can look like a model miss. Fix the harness before changing prompts.
+1. **`1164-receipt.jpg` — unreadable total**  
+   Gold total `null`, gold date `2015-08-06`. Scoring reported `total_ok` and `date_ok` (no invented total; date matched).  
+   The JSON report previously showed `pred_total: "None"` (string) and `pred_date: null` because `score_row` gated date serialization on `isinstance(pred.total, Decimal)`. Report fields are now serialized from the matching prediction attributes.
 
 2. **`2200-receipt.png` — non-receipt**  
-   Gold is not a receipt; prediction cleared money/date fields and still got combined `ok`.  
-   Lesson: success on non-receipts is “correct refusal,” not extraction quality.
+   Gold is not a receipt; prediction cleared money/date fields and still received combined `ok`. Correct refusal is scored separately from receipt-field extraction quality.
 
 3. **`1000-receipt.jpg` — clean receipt**  
-   Pred total `56.58` and date `2016-05-26` matched gold.  
-   Lesson: this is the easy path. Portfolio claims must still disclose that 59 English-heavy fixtures do not prove production-wide grounding.
+   Pred total `56.58` and date `2016-05-26` matched gold. Scores on this curated English-heavy set do not establish production-wide grounding.
 
 ## Known limits
 

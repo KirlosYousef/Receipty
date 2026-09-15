@@ -34,11 +34,7 @@ def test_score_row_ok():
 
 
 def test_pred_date_serialized_when_total_is_null():
-    """Report pred_date from pred.date even when total is absent.
-
-    Regression: score_row used isinstance(pred.total, Decimal), so a valid
-    null total caused pred_date to become None/wrong in the JSON report.
-    """
+    """pred_date must come from pred.date when total is absent."""
     pred = ReceiptExtract(
         is_receipt=True,
         merchant="the golden pear cafe",
