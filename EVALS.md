@@ -71,6 +71,14 @@ A run is invalid and exits non-zero if a labelled fixture is missing or a
 provider call fails. It must be rerun after the input or provider issue is
 resolved; incomplete runs are not valid baselines.
 
+## Deterministic CI safety gate
+
+`evals/ci_cases.json` defines three scripted cases: a clean receipt, an
+unreadable-total receipt, and a non-receipt. The CI test sends their scripted
+provider responses through `ExtractionService` and the normal scoring path.
+It fails if the unreadable-total receipt receives an invented total. It has no
+network, API-key, or model-cost dependency.
+
 ## Baseline 2026-09-15 (authoritative)
 
 Local report: `reports/baseline-2026-09-15-3.json` (gitignored).  
@@ -112,4 +120,4 @@ There were **no combined `ok` failures** on the authoritative baseline. These ca
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
 - Hallucination rates cover one gold-null receipt total and three gold-null receipt dates; more unreadable-field fixtures are needed before treating zero hallucinations as a durable claim.
-- A CI eval gate is not yet enforced.
+- The deterministic CI gate is intentionally small; it does not replace the live labelled baseline.

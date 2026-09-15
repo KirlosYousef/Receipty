@@ -23,5 +23,7 @@ jobs:
           ruff check .
       - name: Type check
         run: pyright
+      - name: Deterministic eval safety gate
+        run: pytest tests/test_deterministic_eval_gate.py -q
       - name: Test with coverage
         run: pytest --cov
