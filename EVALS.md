@@ -15,16 +15,24 @@ Receipty extracts structured receipt fields from image inputs. The evaluation su
 
 ## Scoring contract
 
-Implemented in `evals/scoring.py`. Combined `ok` requires all three hits.
+Implemented in `evals/scoring.py`. Combined `ok` requires all three field hits.
 
-| Field | Comparison |
+| Field / metric | Comparison |
 |---|---|
 | Receipt | Predicted receipt vs gold. `extraction_failed` is always a miss — the system made no classification. |
 | Total | Decimal equality, including both-null |
 | Date | Canonical `YYYY-MM-DD` equality, including both-null |
-| Overall | Receipt, total, and date all hit |
+| Overall (`ok`) | Receipt, total, and date all hit |
+| `hallucinated_total` | A receipt's gold total is `null` and prediction total is non-null |
+| `hallucinated_date` | A receipt's gold date is `null` and prediction date is non-null |
 
-`null` is a valid outcome only when the matching ground-truth label is also `null`. A non-null predicted total or date for a gold-null field fails. A null prediction for a readable non-null gold field also fails. Merchant string mismatches do **not** fail the row.
+`null` is a valid outcome only when the matching ground-truth label is also `null`. A non-null predicted total or date for a gold-null field fails field accuracy and counts as a hallucination for that field. A null prediction for a readable non-null gold field also fails accuracy, but is not a hallucination. Merchant string mismatches do **not** fail the row.
+
+Hallucination rate uses the receipt-only gold-null denominator:
+
+`hallucinated_total_rate = hallucinated_total_count / gold_null_total_cases`
+
+`null/null` agreement is correct and is **not** a hallucination.
 
 ## Current configuration
 
@@ -53,12 +61,12 @@ Requires `OPENROUTER_API_KEY`. Unit tests mock the provider and do not call the 
 
 ## Baseline 2026-09-15 (authoritative)
 
-Local report: `reports/baseline-2026-09-15.json` (gitignored).  
-This is the **best dated run** and the one to cite. Same-day files like `baseline-2026-09-15-2.json` / `-3.json` were intermediate experiments while changing prompts/settings — **do not treat them as the baseline**.
+Local report: `reports/baseline-2026-09-15-3.json` (gitignored).  
+This is the **latest authoritative run** and the one to cite.
 
 | Item | Value |
 |---|---|
-| Commit | `a985bb683b0818ebc131239beb92139f2f932a72` |
+| Commit | Not captured by this legacy report format |
 | Model | `google/gemini-3.1-flash-lite` |
 | Temperature / seed | `0.0` / `42` |
 | N | 59 |
@@ -66,7 +74,8 @@ This is the **best dated run** and the one to cite. Same-day files like `baselin
 | `receipt_ok` / `total_ok` / `date_ok` | 59/59 each |
 | Runner summary `is_receipt` printout | `54/59` — this counts receipt-positive hits only (54 labeled receipts). All 5 non-receipts also scored `receipt_ok`; it is **not** five classification failures. |
 | Runner summary `total` printout | `59/59` |
-| Gold-null total (`1164`) | predicted total absent (correct; not invented) |
+| Receipt-only gold-null totals | 0/1 hallucinated (`1164`) |
+| Receipt-only gold-null dates | 0/3 hallucinated (`1008`, `1013`, `1024`) |
 
 Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 
@@ -90,4 +99,5 @@ There were **no combined `ok` failures** on the authoritative baseline. These ca
 - The dataset is curated; do not claim production-wide accuracy from these scores.
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
-- This baseline does **not** yet publish hallucination-rate denominators, `needs_review` precision/recall, or a CI eval gate.
+- Hallucination rates cover one gold-null receipt total and three gold-null receipt dates; more unreadable-field fixtures are needed before treating zero hallucinations as a durable claim.
+- A CI eval gate is not yet enforced.
