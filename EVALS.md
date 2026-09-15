@@ -34,6 +34,22 @@ Hallucination rate uses the receipt-only gold-null denominator:
 
 `null/null` agreement is correct and is **not** a hallucination.
 
+## Operational metrics
+
+New JSON reports aggregate available per-case measurements:
+
+| Metric | Definition |
+|---|---|
+| Latency p50 | Median latency using nearest-rank percentile: rank `ceil(0.50 × N)` after sorting available `latency_ms` values |
+| Latency p95 | 95th-percentile latency using nearest-rank percentile: rank `ceil(0.95 × N)` |
+| Latency mean | Sum of available latencies divided by the number of latency measurements |
+| Token sums / mean | Prompt, completion, and total tokens from rows where the provider supplied all three values |
+| Cost sum / mean | USD from rows where the provider supplied a cost |
+
+Each metric reports its contributing `count`. If usage data is unavailable for
+every row, its sums and mean are `null`, not zero. Zero would claim a measured
+free request; `null` truthfully means the provider did not supply the value.
+
 ## Current configuration
 
 | Item | Value |

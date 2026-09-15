@@ -202,6 +202,10 @@ def main(argv: list[str] | None = None) -> int:
         f"{summary['hallucinated_date']['count']}/"
         f"{summary['hallucinated_date']['gold_null_date_cases']}"
     )
+    latency = summary["latency_ms"]
+    print(
+        f"latency_ms p50={latency['p50']} p95={latency['p95']} (n={latency['count']})"
+    )
 
     if args.json is not None:
         args.json.parent.mkdir(parents=True, exist_ok=True)
