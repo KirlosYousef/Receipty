@@ -90,4 +90,4 @@ There were **no combined `ok` failures** on the authoritative baseline. These ca
 - The dataset is curated; do not claim production-wide accuracy from these scores.
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
-- This baseline does **not** yet publish hallucination-rate denominators, `needs_review` precision/recall, or a CI eval gate (Week 2 later sessions).
+- This baseline does **not** yet publish hallucination-rate denominators, `needs_review` precision/recall, or a CI eval gate.
