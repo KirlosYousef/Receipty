@@ -34,6 +34,22 @@ Hallucination rate uses the receipt-only gold-null denominator:
 
 `null/null` agreement is correct and is **not** a hallucination.
 
+## Operational metrics
+
+New JSON reports aggregate available per-case measurements:
+
+| Metric | Definition |
+|---|---|
+| Latency p50 | Median latency using nearest-rank percentile: rank `ceil(0.50 × N)` after sorting available `latency_ms` values |
+| Latency p95 | 95th-percentile latency using nearest-rank percentile: rank `ceil(0.95 × N)` |
+| Latency mean | Sum of available latencies divided by the number of latency measurements |
+| Token sums / mean | Prompt, completion, and total tokens from rows where the provider supplied all three values |
+| Cost sum / mean | USD from rows where the provider supplied a cost |
+
+Each metric reports its contributing `count`. If usage data is unavailable for
+every row, its sums and mean are `null`, not zero. Zero would claim a measured
+free request; `null` truthfully means the provider did not supply the value.
+
 ## Current configuration
 
 | Item | Value |
@@ -81,14 +97,14 @@ network, API-key, or model-cost dependency.
 
 ## Baseline 2026-09-15 (authoritative)
 
-Local report: `reports/baseline-2026-09-15-3.json` (gitignored).  
+Local report: `reports/baseline-2026-09-15-4.json` (gitignored).  
 This is the **latest authoritative run** and the one to cite.
 
 | Item | Value |
 |---|---|
-| Commit | Not captured by this legacy report format |
+| Commit | `a5a9eb1910da96befc647c9adc3601430e17b66b` |
 | Model | `google/gemini-3.1-flash-lite` |
-| Temperature / seed | `0.0` / `42` |
+| Temperature / seed / prompt | `0.0` / `42` / `extraction-v1` (`0248b009…530bb6101b`) |
 | N | 59 |
 | Combined `ok` (row-level) | **59/59** |
 | `receipt_ok` / `total_ok` / `date_ok` | 59/59 each |
@@ -96,6 +112,9 @@ This is the **latest authoritative run** and the one to cite.
 | Runner summary `total` printout | `59/59` |
 | Receipt-only gold-null totals | 0/1 hallucinated (`1164`) |
 | Receipt-only gold-null dates | 0/3 hallucinated (`1008`, `1013`, `1024`) |
+| Latency | p50 `1,673.62ms`; p95 `4,181.05ms`; mean `2,046.98ms` (59 measurements) |
+| Tokens | 93,310 prompt + 4,004 completion = 97,314 total; mean 1,649.39 per case (59 measurements) |
+| Cost | `$0.029333` total; `$0.000497` mean per case (59 measurements) |
 
 Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 

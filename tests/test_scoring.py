@@ -136,3 +136,76 @@ def test_summarize_rows_includes_safety_metrics():
     assert summary["hallucinated_total"]["count"] == 1
     assert summary["hallucinated_total"]["gold_null_total_cases"] == 2
     assert summary["hallucinated_total"]["rate"] == 0.5
+
+
+def test_summarize_rows_aggregates_operational_metrics():
+    rows = [
+        {
+            "receipt_ok": True,
+            "total_ok": True,
+            "date_ok": True,
+            "ok": True,
+            "hallucinated_total": False,
+            "hallucinated_date": False,
+            "gold_total": 1.0,
+            "gold_date": "2026-01-01",
+            "gold_is_receipt": True,
+            "latency_ms": latency,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "usd": usd,
+        }
+        for latency, prompt_tokens, completion_tokens, total_tokens, usd in [
+            (10.0, 10, 5, 15, 0.001),
+            (20.0, 20, 10, 30, 0.002),
+            (30.0, 30, 15, 45, 0.003),
+            (40.0, 40, 20, 60, 0.004),
+            (50.0, None, None, None, None),
+        ]
+    ]
+
+    summary = summarize_rows(rows)
+
+    assert summary["latency_ms"] == {"count": 5, "p50": 30.0, "p95": 50.0, "mean": 30.0}
+    assert summary["tokens"] == {
+        "count": 4,
+        "prompt_sum": 100,
+        "completion_sum": 50,
+        "total_sum": 150,
+        "mean_total": 37.5,
+    }
+    assert summary["cost_usd"] == {"count": 4, "sum": 0.01, "mean": 0.0025}
+
+
+def test_summarize_rows_leaves_unavailable_operational_metrics_null():
+    rows = [
+        {
+            "receipt_ok": True,
+            "total_ok": True,
+            "date_ok": True,
+            "ok": True,
+            "hallucinated_total": False,
+            "hallucinated_date": False,
+            "gold_total": 1.0,
+            "gold_date": "2026-01-01",
+            "gold_is_receipt": True,
+            "latency_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "usd": None,
+        }
+    ]
+
+    summary = summarize_rows(rows)
+
+    assert summary["latency_ms"] == {"count": 0, "p50": None, "p95": None, "mean": None}
+    assert summary["tokens"] == {
+        "count": 0,
+        "prompt_sum": None,
+        "completion_sum": None,
+        "total_sum": None,
+        "mean_total": None,
+    }
+    assert summary["cost_usd"] == {"count": 0, "sum": None, "mean": None}

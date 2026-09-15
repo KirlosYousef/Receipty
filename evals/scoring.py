@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from app.domain.schemas import Outcome, ReceiptExtract
@@ -101,6 +102,9 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "gold_null_date_cases": 0,
                 "rate": None,
             },
+            "latency_ms": _latency_summary([]),
+            "tokens": _token_summary([]),
+            "cost_usd": _cost_summary([]),
         }
 
     receipt_correct = sum(1 for r in scored if r["receipt_ok"])
@@ -123,6 +127,17 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     hall_totals = sum(1 for r in scored if r.get("hallucinated_total"))
     hall_dates = sum(1 for r in scored if r.get("hallucinated_date"))
+    latencies = [
+        float(row["latency_ms"]) for row in scored if row.get("latency_ms") is not None
+    ]
+    usage_rows = [
+        row
+        for row in scored
+        if row.get("prompt_tokens") is not None
+        and row.get("completion_tokens") is not None
+        and row.get("total_tokens") is not None
+    ]
+    costs = [float(row["usd"]) for row in scored if row.get("usd") is not None]
 
     return {
         "n": n,
@@ -146,6 +161,9 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "gold_null_date_cases": len(gold_null_dates),
             "rate": _ratio(hall_dates, len(gold_null_dates)),
         },
+        "latency_ms": _latency_summary(latencies),
+        "tokens": _token_summary(usage_rows),
+        "cost_usd": _cost_summary(costs),
     }
 
 
@@ -153,3 +171,52 @@ def _ratio(num: int, den: int) -> float | None:
     if den == 0:
         return None
     return num / den
+
+
+def _latency_summary(values: list[float]) -> dict[str, float | int | None]:
+    if not values:
+        return {"count": 0, "p50": None, "p95": None, "mean": None}
+    return {
+        "count": len(values),
+        "p50": _nearest_rank_percentile(values, 0.50),
+        "p95": _nearest_rank_percentile(values, 0.95),
+        "mean": sum(values) / len(values),
+    }
+
+
+def _nearest_rank_percentile(values: list[float], percentile: float) -> float:
+    ordered = sorted(values)
+    rank = math.ceil(percentile * len(ordered))
+    return ordered[rank - 1]
+
+
+def _token_summary(rows: list[dict[str, Any]]) -> dict[str, float | int | None]:
+    if not rows:
+        return {
+            "count": 0,
+            "prompt_sum": None,
+            "completion_sum": None,
+            "total_sum": None,
+            "mean_total": None,
+        }
+    prompt_sum = sum(int(row["prompt_tokens"]) for row in rows)
+    completion_sum = sum(int(row["completion_tokens"]) for row in rows)
+    total_sum = sum(int(row["total_tokens"]) for row in rows)
+    return {
+        "count": len(rows),
+        "prompt_sum": prompt_sum,
+        "completion_sum": completion_sum,
+        "total_sum": total_sum,
+        "mean_total": total_sum / len(rows),
+    }
+
+
+def _cost_summary(values: list[float]) -> dict[str, float | int | None]:
+    if not values:
+        return {"count": 0, "sum": None, "mean": None}
+    total = sum(values)
+    return {
+        "count": len(values),
+        "sum": round(total, 6),
+        "mean": round(total / len(values), 6),
+    }
