@@ -15,16 +15,36 @@ Receipty extracts structured receipt fields from image inputs. The evaluation su
 
 ## Scoring contract
 
-Implemented in `evals/scoring.py`. Combined `ok` requires all three hits.
+Implemented in `evals/scoring.py`. Combined `ok` requires all three field hits.
 
-| Field | Comparison |
+| Field / metric | Comparison |
 |---|---|
 | Receipt | Predicted receipt vs gold. `extraction_failed` is always a miss — the system made no classification. |
 | Total | Decimal equality, including both-null |
 | Date | Canonical `YYYY-MM-DD` equality, including both-null |
-| Overall | Receipt, total, and date all hit |
+| Overall (`ok`) | Receipt, total, and date all hit |
+| `hallucinated_total` | Gold total is `null` and prediction total is non-null |
+| `hallucinated_date` | Gold date is `null` and prediction date is non-null |
+| `needs_review` precision | Among rows predicted `needs_review`, share whose expected outcome is also `needs_review` |
+| `needs_review` recall | Among rows expected `needs_review`, share predicted `needs_review` |
 
-`null` is a valid outcome only when the matching ground-truth label is also `null`. A non-null predicted total or date for a gold-null field fails. A null prediction for a readable non-null gold field also fails. Merchant string mismatches do **not** fail the row.
+`null` is a valid outcome only when the matching ground-truth label is also `null`. A non-null predicted total or date for a gold-null field fails field accuracy and counts as a hallucination for that field. A null prediction for a readable non-null gold field also fails accuracy, but is not a hallucination. Merchant string mismatches do **not** fail the row.
+
+### Expected outcome policy
+
+If a label sets `expected_outcome`, that value wins. Otherwise it is derived from gold fields:
+
+| Gold | Expected outcome |
+|---|---|
+| `is_receipt=false` | `not_receipt` |
+| receipt with `total=null` or `currency=null` | `needs_review` |
+| otherwise | `success` |
+
+This is a **label/policy** target, not a model-confidence score. Hallucination rate uses the gold-null denominator:
+
+`hallucinated_total_rate = hallucinated_total_count / gold_null_total_cases`
+
+`null/null` agreement is correct and is **not** a hallucination.
 
 ## Current configuration
 
@@ -90,4 +110,5 @@ There were **no combined `ok` failures** on the authoritative baseline. These ca
 - The dataset is curated; do not claim production-wide accuracy from these scores.
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
-- This baseline does **not** yet publish hallucination-rate denominators, `needs_review` precision/recall, or a CI eval gate.
+- Hallucination and `needs_review` metrics are defined in the scoring contract; publish rates from a fresh `--json` run after this change. The 2026-09-15 baseline JSON predates these summary fields.
+- A CI eval gate is not yet enforced.
