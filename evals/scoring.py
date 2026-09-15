@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Any
 
 from app.domain.schemas import Outcome, ReceiptExtract
@@ -38,8 +37,8 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
         "date_ok": d_ok,
         "ok": r_ok and t_ok and d_ok,
         "pred_merchant": pred.merchant,
-        "pred_total": str(pred.total),
-        "pred_date": str(pred.date) if isinstance(pred.total, Decimal) else pred.total,
+        "pred_total": None if pred.total is None else str(pred.total),
+        "pred_date": None if pred.date is None else str(pred.date),
         "gold_merchant": gold.get("merchant"),
         "gold_total": gold_total_value(gold),
         "gold_date": gold.get("date"),

@@ -51,9 +51,44 @@ python -m evals.run --json reports/eval.json
 
 Requires `OPENROUTER_API_KEY`. Unit tests mock the provider and do not call the live model.
 
+## Baseline 2026-09-15
+
+Local report: `reports/baseline-2026-09-15-3.json` (gitignored).
+
+| Item | Value |
+|---|---|
+| Commit | `a985bb683b0818ebc131239beb92139f2f932a72` |
+| Model | `google/gemini-3.1-flash-lite` |
+| Temperature / seed | `0.0` / `42` |
+| N | 59 |
+| `is_receipt` | 54/59 |
+| `total` | 58/59 |
+| Combined `ok` (from rows) | 57/59 |
+| Gold-null total case (`1164`) | predicted `null` (correct; not an invented total) |
+
+Live OpenRouter routes can vary between runs. An earlier same-day run (`baseline-2026-09-15-2.json`) had more date misses; treat these numbers as a dated snapshot, not a permanent SLA.
+
+### Three failures worth explaining
+
+1. **`1024-receipt.jpg` — missing date**  
+   Pred total `33.92` matched gold, but pred date was `null` while gold is `2006-11-15`.  
+   Likely cause: date is hard to read or in an unusual layout; the model correctly refused to invent a total but also failed to extract a readable date.  
+   Lesson: date misses are usually vision/prompt coverage, not money-parser bugs.
+
+2. **`1027-receipt.jpg` — wrong total**  
+   Pred `44.31` vs gold `41.31` (same date).  
+   Likely cause: the model latched onto a nearby amount (subtotal/tax-inclusive line) instead of the payable total.  
+   Lesson: field accuracy can look “almost right” while still being accounting-unsafe; evals must catch near-miss totals.
+
+3. **`1009-receipt.jpg` (from `baseline-2026-09-15-2.json`) — wrong date**  
+   Pred date `2019-06-09` vs gold `2019-08-09`; total matched.  
+   Likely cause: digit confusion on the month (`06` vs `08`), not a serialization bug.  
+   Lesson: before blaming the model, confirm the report fields themselves are trustworthy — Session 1 also fixed a `pred_date` report bug that used `pred.total` when deciding how to serialize the date.
+
 ## Known limits
 
 - A schema-valid model prediction is not evidence that every field is visually grounded in the input.
 - The dataset is curated; do not claim production-wide accuracy from these scores.
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
+- This baseline does **not** yet publish hallucination-rate denominators, `needs_review` precision/recall, or a CI eval gate (Week 2 later sessions).
