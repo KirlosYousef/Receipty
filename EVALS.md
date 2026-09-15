@@ -25,20 +25,10 @@ Implemented in `evals/scoring.py`. Combined `ok` requires all three field hits.
 | Overall (`ok`) | Receipt, total, and date all hit |
 | `hallucinated_total` | A receipt's gold total is `null` and prediction total is non-null |
 | `hallucinated_date` | A receipt's gold date is `null` and prediction date is non-null |
-| `needs_review` precision | Among rows predicted `needs_review`, share whose expected outcome is also `needs_review` |
-| `needs_review` recall | Among rows expected `needs_review`, share predicted `needs_review` |
 
 `null` is a valid outcome only when the matching ground-truth label is also `null`. A non-null predicted total or date for a gold-null field fails field accuracy and counts as a hallucination for that field. A null prediction for a readable non-null gold field also fails accuracy, but is not a hallucination. Merchant string mismatches do **not** fail the row.
 
-### Expected outcome policy
-
-`needs_review` precision and recall are calculated only for fixtures with a
-human-owned `expected_outcome` label. The current 59 labels do not yet include
-that field, so the metric is reported as unavailable rather than inferred from
-missing optional fields such as currency.
-
-This is a **label/policy** target, not a model-confidence score. Hallucination
-rate uses the receipt-only gold-null denominator:
+Hallucination rate uses the receipt-only gold-null denominator:
 
 `hallucinated_total_rate = hallucinated_total_count / gold_null_total_cases`
 
@@ -86,7 +76,6 @@ This is the **latest authoritative run** and the one to cite.
 | Runner summary `total` printout | `59/59` |
 | Receipt-only gold-null totals | 0/1 hallucinated (`1164`) |
 | Receipt-only gold-null dates | 0/3 hallucinated (`1008`, `1013`, `1024`) |
-| `needs_review` precision / recall | Unavailable: the fixtures do not yet have human-owned `expected_outcome` labels |
 
 Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 
@@ -111,5 +100,4 @@ There were **no combined `ok` failures** on the authoritative baseline. These ca
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
 - Hallucination rates cover one gold-null receipt total and three gold-null receipt dates; more unreadable-field fixtures are needed before treating zero hallucinations as a durable claim.
-- `needs_review` precision/recall requires `expected_outcome` annotations and is not yet a publishable metric.
 - A CI eval gate is not yet enforced.

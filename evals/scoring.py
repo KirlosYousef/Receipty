@@ -47,23 +47,11 @@ def hallucinated_date(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
     )
 
 
-def expected_outcome_from_gold(gold: dict[str, Any]) -> str | None:
-    """Return the human-owned outcome label when the fixture supplies one."""
-    explicit = gold.get("expected_outcome")
-    return str(explicit) if explicit is not None else None
-
-
 def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
     r_ok = receipt_hit(pred, gold)
     t_ok = total_hit(pred, gold)
     d_ok = date_hit(pred, gold)
-    expected = expected_outcome_from_gold(gold)
     pred_outcome = pred.outcome.value if pred.outcome is not None else None
-    outcome_ok = (
-        pred_outcome == expected
-        if pred_outcome is not None and expected is not None
-        else None
-    )
     return {
         "receipt_ok": r_ok,
         "total_ok": t_ok,
@@ -72,8 +60,6 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
         "hallucinated_total": hallucinated_total(pred, gold),
         "hallucinated_date": hallucinated_date(pred, gold),
         "pred_outcome": pred_outcome,
-        "expected_outcome": expected,
-        "outcome_ok": outcome_ok,
         "pred_merchant": pred.merchant,
         "pred_total": None if pred.total is None else str(pred.total),
         "pred_date": None if pred.date is None else str(pred.date),
@@ -115,13 +101,6 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "gold_null_date_cases": 0,
                 "rate": None,
             },
-            "needs_review": {
-                "precision": None,
-                "recall": None,
-                "pred_count": 0,
-                "gold_count": 0,
-                "true_positives": 0,
-            },
         }
 
     receipt_correct = sum(1 for r in scored if r["receipt_ok"])
@@ -145,19 +124,6 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     hall_totals = sum(1 for r in scored if r.get("hallucinated_total"))
     hall_dates = sum(1 for r in scored if r.get("hallucinated_date"))
 
-    pred_review = [
-        r for r in scored if r.get("pred_outcome") == Outcome.needs_review.value
-    ]
-    gold_review = [
-        r for r in scored if r.get("expected_outcome") == Outcome.needs_review.value
-    ]
-    true_positive_review = sum(
-        1
-        for r in scored
-        if r.get("pred_outcome") == Outcome.needs_review.value
-        and r.get("expected_outcome") == Outcome.needs_review.value
-    )
-
     return {
         "n": n,
         "errors": errors,
@@ -179,13 +145,6 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "count": hall_dates,
             "gold_null_date_cases": len(gold_null_dates),
             "rate": _ratio(hall_dates, len(gold_null_dates)),
-        },
-        "needs_review": {
-            "precision": _ratio(true_positive_review, len(pred_review)),
-            "recall": _ratio(true_positive_review, len(gold_review)),
-            "pred_count": len(pred_review),
-            "gold_count": len(gold_review),
-            "true_positives": true_positive_review,
         },
     }
 

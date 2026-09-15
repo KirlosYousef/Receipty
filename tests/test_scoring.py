@@ -105,49 +105,6 @@ def test_both_null_is_not_hallucination():
     assert not hallucinated_date(pred, gold)
 
 
-def test_needs_review_requires_explicit_gold_label():
-    pred = ReceiptExtract(is_receipt=True, total=None, currency=None)
-    scored = score_row(
-        pred,
-        {"is_receipt": True, "total": None, "currency": None, "date": None},
-    )
-    assert scored["expected_outcome"] is None
-    assert scored["pred_outcome"] == "needs_review"
-    assert scored["outcome_ok"] is None
-
-
-def test_needs_review_uses_explicit_gold_label():
-    pred = ReceiptExtract(is_receipt=True, total=None, currency=None)
-    scored = score_row(
-        pred,
-        {
-            "is_receipt": True,
-            "total": None,
-            "currency": None,
-            "date": None,
-            "expected_outcome": "needs_review",
-        },
-    )
-    assert scored["expected_outcome"] == "needs_review"
-    assert scored["outcome_ok"] is True
-
-
-def test_non_receipt_expected_outcome():
-    pred = ReceiptExtract(is_receipt=False, outcome=Outcome.not_receipt)
-    scored = score_row(
-        pred,
-        {
-            "is_receipt": False,
-            "total": None,
-            "currency": None,
-            "date": None,
-            "expected_outcome": "not_receipt",
-        },
-    )
-    assert scored["expected_outcome"] == "not_receipt"
-    assert scored["outcome_ok"] is True
-
-
 def test_summarize_rows_includes_safety_metrics():
     rows = [
         {
@@ -160,8 +117,6 @@ def test_summarize_rows_includes_safety_metrics():
             "gold_total": None,
             "gold_date": None,
             "gold_is_receipt": True,
-            "pred_outcome": "needs_review",
-            "expected_outcome": "needs_review",
         },
         {
             "receipt_ok": True,
@@ -173,8 +128,6 @@ def test_summarize_rows_includes_safety_metrics():
             "gold_total": None,
             "gold_date": "2015-01-01",
             "gold_is_receipt": True,
-            "pred_outcome": "success",
-            "expected_outcome": "needs_review",
         },
     ]
     summary = summarize_rows(rows)
@@ -183,5 +136,3 @@ def test_summarize_rows_includes_safety_metrics():
     assert summary["hallucinated_total"]["count"] == 1
     assert summary["hallucinated_total"]["gold_null_total_cases"] == 2
     assert summary["hallucinated_total"]["rate"] == 0.5
-    assert summary["needs_review"]["precision"] == 1.0
-    assert summary["needs_review"]["recall"] == 0.5

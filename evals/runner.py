@@ -84,11 +84,6 @@ def main() -> None:
             "hallucinated_total:",
             scored["hallucinated_total"],
             "\n",
-            "outcome:",
-            scored["pred_outcome"],
-            "expected:",
-            scored["expected_outcome"],
-            "\n",
             "overall:",
             "PASS" if scored["ok"] else "FAIL",
             "\n",
@@ -108,10 +103,7 @@ def main() -> None:
         f"{summary['hallucinated_total']['gold_null_total_cases']}  "
         "hallucinated_date "
         f"{summary['hallucinated_date']['count']}/"
-        f"{summary['hallucinated_date']['gold_null_date_cases']}  "
-        "needs_review "
-        f"P={summary['needs_review']['precision']} "
-        f"R={summary['needs_review']['recall']}"
+        f"{summary['hallucinated_date']['gold_null_date_cases']}"
     )
 
     if args.json is not None:
