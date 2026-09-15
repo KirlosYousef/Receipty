@@ -61,12 +61,12 @@ Requires `OPENROUTER_API_KEY`. Unit tests mock the provider and do not call the 
 
 ## Baseline 2026-09-15 (authoritative)
 
-Local report: `reports/baseline-2026-09-15-2.json` (gitignored).  
+Local report: `reports/baseline-2026-09-15-3.json` (gitignored).  
 This is the **latest authoritative run** and the one to cite.
 
 | Item | Value |
 |---|---|
-| Commit | `a985bb683b0818ebc131239beb92139f2f932a72` |
+| Commit | Not captured by this legacy report format |
 | Model | `google/gemini-3.1-flash-lite` |
 | Temperature / seed | `0.0` / `42` |
 | N | 59 |
