@@ -59,6 +59,18 @@ python -m evals.run --json reports/eval.json
 
 Requires `OPENROUTER_API_KEY`. Unit tests mock the provider and do not call the live model.
 
+## Report reproducibility
+
+Every new JSON report contains run metadata: UTC timestamp, git commit SHA,
+model, temperature, seed, prompt version and SHA-256 hash, plus label and
+fixture paths. Each evaluated row records elapsed latency and, when the
+provider supplies it, model, prompt tokens, completion tokens, total tokens,
+and cost.
+
+A run is invalid and exits non-zero if a labelled fixture is missing or a
+provider call fails. It must be rerun after the input or provider issue is
+resolved; incomplete runs are not valid baselines.
+
 ## Baseline 2026-09-15 (authoritative)
 
 Local report: `reports/baseline-2026-09-15-3.json` (gitignored).  
