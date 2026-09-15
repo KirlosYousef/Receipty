@@ -51,9 +51,43 @@ python -m evals.run --json reports/eval.json
 
 Requires `OPENROUTER_API_KEY`. Unit tests mock the provider and do not call the live model.
 
+## Baseline 2026-09-15 (authoritative)
+
+Local report: `reports/baseline-2026-09-15.json` (gitignored).  
+This is the **best dated run** and the one to cite. Same-day files like `baseline-2026-09-15-2.json` / `-3.json` were intermediate experiments while changing prompts/settings — **do not treat them as the baseline**.
+
+| Item | Value |
+|---|---|
+| Commit | `a985bb683b0818ebc131239beb92139f2f932a72` |
+| Model | `google/gemini-3.1-flash-lite` |
+| Temperature / seed | `0.0` / `42` |
+| N | 59 |
+| Combined `ok` (row-level) | **59/59** |
+| `receipt_ok` / `total_ok` / `date_ok` | 59/59 each |
+| Runner summary `is_receipt` printout | `54/59` — this counts receipt-positive hits only (54 labeled receipts). All 5 non-receipts also scored `receipt_ok`; it is **not** five classification failures. |
+| Runner summary `total` printout | `59/59` |
+| Gold-null total (`1164`) | predicted total absent (correct; not invented) |
+
+Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
+
+### Notable cases from this run
+
+There were **no combined `ok` failures** on the authoritative baseline. These cases document the scoring contract:
+
+1. **`1164-receipt.jpg` — unreadable total**  
+   Gold total `null`, gold date `2015-08-06`. Scoring reported `total_ok` and `date_ok` (no invented total; date matched).  
+   The JSON report previously showed `pred_total: "None"` (string) and `pred_date: null` because `score_row` gated date serialization on `isinstance(pred.total, Decimal)`. Report fields are now serialized from the matching prediction attributes.
+
+2. **`2200-receipt.png` — non-receipt**  
+   Gold is not a receipt; prediction cleared money/date fields and still received combined `ok`. Correct refusal is scored separately from receipt-field extraction quality.
+
+3. **`1000-receipt.jpg` — clean receipt**  
+   Pred total `56.58` and date `2016-05-26` matched gold. Scores on this curated English-heavy set do not establish production-wide grounding.
+
 ## Known limits
 
 - A schema-valid model prediction is not evidence that every field is visually grounded in the input.
 - The dataset is curated; do not claim production-wide accuracy from these scores.
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
+- This baseline does **not** yet publish hallucination-rate denominators, `needs_review` precision/recall, or a CI eval gate.

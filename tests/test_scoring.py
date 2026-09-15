@@ -31,3 +31,29 @@ def test_score_row_ok():
     assert scored["ok"] is True
     assert scored["receipt_ok"] is True
     assert scored["total_ok"] is True
+
+
+def test_pred_date_serialized_when_total_is_null():
+    """pred_date must come from pred.date when total is absent."""
+    pred = ReceiptExtract(
+        is_receipt=True,
+        merchant="the golden pear cafe",
+        total=None,
+        currency=None,
+        date="2015-08-06",
+    )
+    scored = score_row(
+        pred,
+        {
+            "is_receipt": True,
+            "merchant": "the golden pear Cafe",
+            "total": None,
+            "currency": None,
+            "date": "2015-08-06",
+        },
+    )
+    assert scored["pred_total"] is None
+    assert scored["pred_date"] == "2015-08-06"
+    assert scored["date_ok"] is True
+    assert scored["total_ok"] is True
+    assert scored["ok"] is True
