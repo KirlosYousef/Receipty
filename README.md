@@ -35,7 +35,7 @@ Aimed at AI / applied-ML engineering work: shipping an extraction system rather 
 | **Document / vision LLM** | Image ingest as a `data:{mime};base64,...` `image_url` (JPEG / PNG / WebP, max ~8 MB). Text paste uses the same prompt and post-rules. No classical OCR stack. |
 | **Locale-aware parsing** | `_money()` handles `1,234.56` vs `1.234,56`; a single separator plus three fractional digits is treated as ambiguous and becomes `null`. Dates accept several common formats; unparseable dates become `null`. |
 | **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Currency may be inferred from text hints (EGP / USD / EUR) only when unique. Negative totals need review. |
-| **Evaluation** | 59 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics: `is_receipt`, `total`, and `date`. Combined `ok` requires all three. `extraction_failed` is never a correct receipt classification. See [EVALS.md](EVALS.md). |
+| **Evaluation** | 60 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics include class-conditional receipt, total, date, merchant, and available currency accuracy; tax is explicitly unavailable without labels. Combined `ok` requires receipt, total, and date. `extraction_failed` is never a correct receipt classification. See [EVALS.md](EVALS.md). |
 | **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default so eval runs are comparable. Both are configurable. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
 | **Cost observability** | Per-call prompt/completion tokens and USD → `logs/cost.jsonl`; aggregated on `GET /v1/usage` and the dashboard. |
@@ -237,7 +237,10 @@ The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLo
 | `date` | Exact `YYYY-MM-DD` match against the gold label, including both-null. |
 | Combined `ok` | All three hits. |
 
-Merchant string mismatches still count as OK: name / OCR variance is noisy compared with money and dates. Scores are evidence for **`is_receipt`, `total`, and `date` on this fixture set**. They are not evidence-grounding for merchant, tax, currency, or production traffic.
+Merchant is measured with case- and whitespace-normalized matching, but does not
+change combined `ok`. Currency is measured only when the gold label is explicit;
+tax remains unavailable because labels do not contain tax values. Scores are
+evidence for this fixture set, not evidence-grounding or production traffic.
 
 ## Tests and CI
 

@@ -2,8 +2,10 @@ from decimal import Decimal
 
 from app.domain.schemas import Outcome, ReceiptExtract
 from evals.scoring import (
+    currency_hit,
     hallucinated_date,
     hallucinated_total,
+    merchant_hit,
     receipt_hit,
     score_row,
     summarize_rows,
@@ -30,6 +32,15 @@ def test_total_mismatch():
 def test_total_match():
     pred = ReceiptExtract(is_receipt=True, total=Decimal("28.31"))
     assert total_hit(pred, {"total": 28.31})
+
+
+def test_merchant_and_currency_hits_use_available_receipt_labels():
+    pred = ReceiptExtract(is_receipt=True, merchant="  GREEN field ", currency="USD")
+    gold = {"is_receipt": True, "merchant": "green FIELD", "currency": "USD"}
+
+    assert merchant_hit(pred, gold) is True
+    assert currency_hit(pred, gold) is True
+    assert currency_hit(pred, {**gold, "currency": None}) is None
 
 
 def test_score_row_ok():
@@ -136,6 +147,46 @@ def test_summarize_rows_includes_safety_metrics():
     assert summary["hallucinated_total"]["count"] == 1
     assert summary["hallucinated_total"]["gold_null_total_cases"] == 2
     assert summary["hallucinated_total"]["rate"] == 0.5
+
+
+def test_summarize_rows_includes_class_slices_and_label_availability():
+    rows = [
+        {
+            "receipt_ok": True,
+            "total_ok": True,
+            "date_ok": True,
+            "merchant_ok": True,
+            "currency_ok": None,
+            "ok": True,
+            "gold_is_receipt": True,
+        },
+        {
+            "receipt_ok": True,
+            "total_ok": True,
+            "date_ok": True,
+            "merchant_ok": None,
+            "currency_ok": None,
+            "ok": True,
+            "gold_is_receipt": False,
+        },
+    ]
+
+    summary = summarize_rows(rows)
+
+    assert summary["class_conditional"]["receipt"]["n"] == 1
+    assert summary["class_conditional"]["non_receipt"]["n"] == 1
+    assert summary["fields"]["merchant"] == {
+        "correct": 1,
+        "scored": 1,
+        "accuracy": 1.0,
+    }
+    assert summary["fields"]["currency"]["accuracy"] is None
+    assert summary["fields"]["tax"] == {
+        "correct": None,
+        "scored": 0,
+        "accuracy": None,
+        "reason": "labels do not include tax",
+    }
 
 
 def test_summarize_rows_aggregates_operational_metrics():
