@@ -23,8 +23,8 @@ Implemented in `evals/scoring.py`. Combined `ok` requires all three field hits.
 | Total | Decimal equality, including both-null |
 | Date | Canonical `YYYY-MM-DD` equality, including both-null |
 | Overall (`ok`) | Receipt, total, and date all hit |
-| `hallucinated_total` | Gold total is `null` and prediction total is non-null |
-| `hallucinated_date` | Gold date is `null` and prediction date is non-null |
+| `hallucinated_total` | A receipt's gold total is `null` and prediction total is non-null |
+| `hallucinated_date` | A receipt's gold date is `null` and prediction date is non-null |
 | `needs_review` precision | Among rows predicted `needs_review`, share whose expected outcome is also `needs_review` |
 | `needs_review` recall | Among rows expected `needs_review`, share predicted `needs_review` |
 
@@ -32,15 +32,13 @@ Implemented in `evals/scoring.py`. Combined `ok` requires all three field hits.
 
 ### Expected outcome policy
 
-If a label sets `expected_outcome`, that value wins. Otherwise it is derived from gold fields:
+`needs_review` precision and recall are calculated only for fixtures with a
+human-owned `expected_outcome` label. The current 59 labels do not yet include
+that field, so the metric is reported as unavailable rather than inferred from
+missing optional fields such as currency.
 
-| Gold | Expected outcome |
-|---|---|
-| `is_receipt=false` | `not_receipt` |
-| receipt with `total=null` or `currency=null` | `needs_review` |
-| otherwise | `success` |
-
-This is a **label/policy** target, not a model-confidence score. Hallucination rate uses the gold-null denominator:
+This is a **label/policy** target, not a model-confidence score. Hallucination
+rate uses the receipt-only gold-null denominator:
 
 `hallucinated_total_rate = hallucinated_total_count / gold_null_total_cases`
 
@@ -73,8 +71,8 @@ Requires `OPENROUTER_API_KEY`. Unit tests mock the provider and do not call the 
 
 ## Baseline 2026-09-15 (authoritative)
 
-Local report: `reports/baseline-2026-09-15.json` (gitignored).  
-This is the **best dated run** and the one to cite. Same-day files like `baseline-2026-09-15-2.json` / `-3.json` were intermediate experiments while changing prompts/settings — **do not treat them as the baseline**.
+Local report: `reports/baseline-2026-09-15-2.json` (gitignored).  
+This is the **latest authoritative run** and the one to cite.
 
 | Item | Value |
 |---|---|
@@ -86,7 +84,9 @@ This is the **best dated run** and the one to cite. Same-day files like `baselin
 | `receipt_ok` / `total_ok` / `date_ok` | 59/59 each |
 | Runner summary `is_receipt` printout | `54/59` — this counts receipt-positive hits only (54 labeled receipts). All 5 non-receipts also scored `receipt_ok`; it is **not** five classification failures. |
 | Runner summary `total` printout | `59/59` |
-| Gold-null total (`1164`) | predicted total absent (correct; not invented) |
+| Receipt-only gold-null totals | 0/1 hallucinated (`1164`) |
+| Receipt-only gold-null dates | 0/3 hallucinated (`1008`, `1013`, `1024`) |
+| `needs_review` precision / recall | Unavailable: the fixtures do not yet have human-owned `expected_outcome` labels |
 
 Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 
@@ -110,5 +110,6 @@ There were **no combined `ok` failures** on the authoritative baseline. These ca
 - The dataset is curated; do not claim production-wide accuracy from these scores.
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
 - Merchant is inspected in the runner output but is not part of combined `ok`.
-- Hallucination and `needs_review` metrics are defined in the scoring contract; publish rates from a fresh `--json` run after this change. The 2026-09-15 baseline JSON predates these summary fields.
+- Hallucination rates cover one gold-null receipt total and three gold-null receipt dates; more unreadable-field fixtures are needed before treating zero hallucinations as a durable claim.
+- `needs_review` precision/recall requires `expected_outcome` annotations and is not yet a publishable metric.
 - A CI eval gate is not yet enforced.

@@ -31,24 +31,26 @@ def date_hit(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
 
 def hallucinated_total(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
     """Gold total is absent/unreadable, but the prediction invented one."""
-    return gold.get("total") is None and pred.total is not None
+    return (
+        bool(gold.get("is_receipt"))
+        and gold.get("total") is None
+        and pred.total is not None
+    )
 
 
 def hallucinated_date(pred: ReceiptExtract, gold: dict[str, Any]) -> bool:
     """Gold date is absent/unreadable, but the prediction invented one."""
-    return gold.get("date") is None and pred.date is not None
+    return (
+        bool(gold.get("is_receipt"))
+        and gold.get("date") is None
+        and pred.date is not None
+    )
 
 
-def expected_outcome_from_gold(gold: dict[str, Any]) -> str:
-    """Prefer an explicit label; otherwise apply the review policy to gold fields."""
+def expected_outcome_from_gold(gold: dict[str, Any]) -> str | None:
+    """Return the human-owned outcome label when the fixture supplies one."""
     explicit = gold.get("expected_outcome")
-    if explicit:
-        return str(explicit)
-    if not gold.get("is_receipt"):
-        return Outcome.not_receipt.value
-    if gold.get("total") is None or gold.get("currency") is None:
-        return Outcome.needs_review.value
-    return Outcome.success.value
+    return str(explicit) if explicit is not None else None
 
 
 def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
@@ -57,6 +59,11 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
     d_ok = date_hit(pred, gold)
     expected = expected_outcome_from_gold(gold)
     pred_outcome = pred.outcome.value if pred.outcome is not None else None
+    outcome_ok = (
+        pred_outcome == expected
+        if pred_outcome is not None and expected is not None
+        else None
+    )
     return {
         "receipt_ok": r_ok,
         "total_ok": t_ok,
@@ -66,7 +73,7 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
         "hallucinated_date": hallucinated_date(pred, gold),
         "pred_outcome": pred_outcome,
         "expected_outcome": expected,
-        "outcome_ok": pred_outcome == expected if pred_outcome is not None else None,
+        "outcome_ok": outcome_ok,
         "pred_merchant": pred.merchant,
         "pred_total": None if pred.total is None else str(pred.total),
         "pred_date": None if pred.date is None else str(pred.date),
@@ -129,8 +136,12 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if r["receipt_ok"] and r.get("pred_outcome") != Outcome.not_receipt.value
     )
 
-    gold_null_totals = [r for r in scored if r.get("gold_total") is None]
-    gold_null_dates = [r for r in scored if r.get("gold_date") is None]
+    gold_null_totals = [
+        r for r in scored if r.get("gold_is_receipt") and r.get("gold_total") is None
+    ]
+    gold_null_dates = [
+        r for r in scored if r.get("gold_is_receipt") and r.get("gold_date") is None
+    ]
     hall_totals = sum(1 for r in scored if r.get("hallucinated_total"))
     hall_dates = sum(1 for r in scored if r.get("hallucinated_date"))
 

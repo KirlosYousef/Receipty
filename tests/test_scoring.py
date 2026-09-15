@@ -75,7 +75,13 @@ def test_hallucinated_total_on_gold_null():
     scored = score_row(pred, gold)
     assert scored["hallucinated_total"] is True
     assert scored["total_ok"] is False
-    assert scored["expected_outcome"] == "needs_review"
+
+
+def test_non_receipt_null_fields_are_not_hallucinations():
+    pred = ReceiptExtract(is_receipt=False, outcome=Outcome.not_receipt)
+    gold = {"is_receipt": False, "total": None, "currency": None, "date": None}
+    assert not hallucinated_total(pred, gold)
+    assert not hallucinated_date(pred, gold)
 
 
 def test_hallucinated_date_on_gold_null():
@@ -99,14 +105,30 @@ def test_both_null_is_not_hallucination():
     assert not hallucinated_date(pred, gold)
 
 
-def test_needs_review_expected_outcome_derived():
+def test_needs_review_requires_explicit_gold_label():
     pred = ReceiptExtract(is_receipt=True, total=None, currency=None)
     scored = score_row(
         pred,
         {"is_receipt": True, "total": None, "currency": None, "date": None},
     )
-    assert scored["expected_outcome"] == "needs_review"
+    assert scored["expected_outcome"] is None
     assert scored["pred_outcome"] == "needs_review"
+    assert scored["outcome_ok"] is None
+
+
+def test_needs_review_uses_explicit_gold_label():
+    pred = ReceiptExtract(is_receipt=True, total=None, currency=None)
+    scored = score_row(
+        pred,
+        {
+            "is_receipt": True,
+            "total": None,
+            "currency": None,
+            "date": None,
+            "expected_outcome": "needs_review",
+        },
+    )
+    assert scored["expected_outcome"] == "needs_review"
     assert scored["outcome_ok"] is True
 
 
@@ -114,7 +136,13 @@ def test_non_receipt_expected_outcome():
     pred = ReceiptExtract(is_receipt=False, outcome=Outcome.not_receipt)
     scored = score_row(
         pred,
-        {"is_receipt": False, "total": None, "currency": None, "date": None},
+        {
+            "is_receipt": False,
+            "total": None,
+            "currency": None,
+            "date": None,
+            "expected_outcome": "not_receipt",
+        },
     )
     assert scored["expected_outcome"] == "not_receipt"
     assert scored["outcome_ok"] is True
