@@ -77,6 +77,7 @@
     "1172-receipt.jpg": {"source": "express_expense_srd", "risk_categories": []},
     "1181-receipt.jpg": {"source": "express_expense_srd", "risk_categories": ["currency_unspecified"]},
     "1189-receipt.jpg": {"source": "express_expense_srd", "risk_categories": ["currency_unspecified"]},
+    "1199-receipt.jpg": {"source": "express_expense_srd", "risk_categories": []},
     "2200-receipt.png": {"source": "unverified_non_receipt", "risk_categories": ["non_receipt"]},
     "2201-receipt.png": {"source": "unverified_non_receipt", "risk_categories": ["non_receipt"]},
     "2202-receipt.jpg": {"source": "unverified_non_receipt", "risk_categories": ["non_receipt"]},

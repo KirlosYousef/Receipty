@@ -52,6 +52,7 @@
 {"file": "1172-receipt.jpg", "is_receipt": true, "merchant": "El Valle Mexican Restaurant", "total": 17.75, "currency": "USD", "date": "2017-12-02"}
 {"file": "1181-receipt.jpg", "is_receipt": true, "merchant": "DEL FRISCO'S #8620", "total": 439.86, "currency": null, "date": "2016-04-07"}
 {"file": "1189-receipt.jpg", "is_receipt": true, "merchant": "MIGUELS MEXICAN", "total": 27.08, "currency": null, "date": "2017-07-05"}
+{"file": "1199-receipt.jpg", "is_receipt": true, "merchant": "Nonna", "total": 128.33, "currency": "USD", "date": "2012-05-21"}
 {"file": "2200-receipt.png", "is_receipt": false, "merchant": null, "total": null, "currency": null, "date": null}
 {"file": "2201-receipt.png", "is_receipt": false, "merchant": null, "total": null, "currency": null, "date": null}
 {"file": "2202-receipt.jpg", "is_receipt": false, "merchant": null, "total": null, "currency": null, "date": null}
