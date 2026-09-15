@@ -1,0 +1,59 @@
+[
+  {
+    "name": "clean_receipt",
+    "input": "CI clean receipt fixture",
+    "gold": {
+      "is_receipt": true,
+      "merchant": "Example Cafe",
+      "total": 12.34,
+      "currency": "USD",
+      "date": "2026-09-15"
+    },
+    "provider_response": {
+      "is_receipt": true,
+      "merchant": "Example Cafe",
+      "total": "12.34",
+      "currency": "USD",
+      "date": "2026-09-15",
+      "tax": null
+    }
+  },
+  {
+    "name": "unreadable_total",
+    "input": "CI unreadable total fixture",
+    "gold": {
+      "is_receipt": true,
+      "merchant": "Blurred Market",
+      "total": null,
+      "currency": "USD",
+      "date": "2026-09-15"
+    },
+    "provider_response": {
+      "is_receipt": true,
+      "merchant": "Blurred Market",
+      "total": null,
+      "currency": "USD",
+      "date": "2026-09-15",
+      "tax": null
+    }
+  },
+  {
+    "name": "non_receipt",
+    "input": "CI non-receipt fixture",
+    "gold": {
+      "is_receipt": false,
+      "merchant": null,
+      "total": null,
+      "currency": null,
+      "date": null
+    },
+    "provider_response": {
+      "is_receipt": false,
+      "merchant": null,
+      "total": null,
+      "currency": null,
+      "date": null,
+      "tax": null
+    }
+  }
+]
