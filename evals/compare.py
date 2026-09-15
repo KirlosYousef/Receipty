@@ -21,11 +21,16 @@ class ReportComparisonError(ValueError):
     """Reports cannot support a meaningful repeated-run comparison."""
 
 
-def compare_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+def compare_reports(
+    reports: list[dict[str, Any]], *, allow_config_differences: bool = False
+) -> dict[str, Any]:
     if len(reports) < 2:
         raise ReportComparisonError("at least two reports are required")
 
-    _validate_compatible_metadata(reports)
+    if allow_config_differences:
+        _validate_shared_dataset(reports)
+    else:
+        _validate_compatible_metadata(reports)
     rows_by_file = [_rows_by_file(report) for report in reports]
     expected_files = set(rows_by_file[0])
     if any(set(rows) != expected_files for rows in rows_by_file[1:]):
@@ -38,6 +43,7 @@ def compare_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
     )
     return {
         "runs": len(reports),
+        "configurations": [_configuration(report) for report in reports],
         "prediction_variance": {
             "cases": len(expected_files),
             "changed_cases": len(changed),
@@ -77,6 +83,23 @@ def _validate_compatible_metadata(reports: list[dict[str, Any]]) -> None:
         for key in COMPATIBILITY_KEYS:
             if metadata.get(key) != baseline.get(key):
                 raise ReportComparisonError(f"metadata mismatch: {key}")
+
+
+def _validate_shared_dataset(reports: list[dict[str, Any]]) -> None:
+    baseline = reports[0].get("metadata", {})
+    for report in reports[1:]:
+        metadata = report.get("metadata", {})
+        for key in ("labels_path", "fixtures_path"):
+            if metadata.get(key) != baseline.get(key):
+                raise ReportComparisonError(f"metadata mismatch: {key}")
+
+
+def _configuration(report: dict[str, Any]) -> dict[str, Any]:
+    metadata = report.get("metadata", {})
+    return {
+        key: metadata.get(key)
+        for key in ("model", "temperature", "seed", "prompt_version", "prompt_hash")
+    }
 
 
 def _rows_by_file(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -132,10 +155,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--json", type=Path, default=None, help="Write comparison JSON here"
     )
+    parser.add_argument(
+        "--allow-config-differences",
+        action="store_true",
+        help="Compare prompt/model experiments sharing the same labels and fixtures",
+    )
     args = parser.parse_args(argv)
     try:
         result = compare_reports(
-            [json.loads(path.read_text()) for path in args.reports]
+            [json.loads(path.read_text()) for path in args.reports],
+            allow_config_differences=args.allow_config_differences,
         )
     except (OSError, json.JSONDecodeError, ReportComparisonError) as exc:
         parser.error(str(exc))

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from app.core.config import Settings, get_settings
-from app.llm.prompts import EXTRACTION_PROMPT
+from app.llm.prompts import DEFAULT_PROMPT_VERSION, EXTRACTION_PROMPTS, prompt_for
 from app.llm.provider import OpenRouterProvider
 from app.observability.usage import UsageLogger
 from app.services.extraction import ExtractionService
@@ -19,7 +19,6 @@ from evals.scoring import score_row, summarize_rows
 
 FIXTURES = Path("evals/fixtures")
 LABELS = Path("evals/labels.jsonl")
-PROMPT_VERSION = "extraction-v1"
 
 
 class ImageExtractionService(Protocol):
@@ -66,11 +65,17 @@ class EvaluationUsageLogger:
         return latest
 
 
-def build_service() -> tuple[ExtractionService, EvaluationUsageLogger, Settings]:
+def build_service(
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
+) -> tuple[ExtractionService, EvaluationUsageLogger, Settings]:
     settings = get_settings()
     provider = OpenRouterProvider(settings)
     usage = EvaluationUsageLogger(UsageLogger(settings.cost_log_path))
-    return ExtractionService(provider, usage), usage, settings
+    return (
+        ExtractionService(provider, usage, prompt=prompt_for(prompt_version)),
+        usage,
+        settings,
+    )
 
 
 def load_labels(path: Path) -> dict[str, dict[str, Any]]:
@@ -82,15 +87,18 @@ def load_labels(path: Path) -> dict[str, dict[str, Any]]:
     }
 
 
-def run_metadata(settings: Settings) -> dict[str, Any]:
+def run_metadata(
+    settings: Settings, prompt_version: str = DEFAULT_PROMPT_VERSION
+) -> dict[str, Any]:
+    prompt = prompt_for(prompt_version)
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "commit_sha": _git_sha(),
         "model": settings.model,
         "temperature": settings.temperature,
         "seed": settings.seed,
-        "prompt_version": PROMPT_VERSION,
-        "prompt_hash": hashlib.sha256(EXTRACTION_PROMPT.encode("utf-8")).hexdigest(),
+        "prompt_version": prompt_version,
+        "prompt_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
         "labels_path": str(LABELS),
         "fixtures_path": str(FIXTURES),
     }
@@ -173,15 +181,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--json", type=Path, default=None, help="Write report JSON here"
     )
+    parser.add_argument(
+        "--prompt-version",
+        choices=sorted(EXTRACTION_PROMPTS),
+        default=DEFAULT_PROMPT_VERSION,
+        help="Versioned extraction prompt to evaluate",
+    )
     args = parser.parse_args(argv)
-    service, usage_logger, settings = build_service()
+    service, usage_logger, settings = build_service(args.prompt_version)
     try:
         report = run_evaluation(
             labels_path=LABELS,
             fixtures_path=FIXTURES,
             service=service,
             usage_logger=usage_logger,
-            metadata=run_metadata(settings),
+            metadata=run_metadata(settings, args.prompt_version),
         )
     except EvaluationRunError as exc:
         print(f"EVAL INVALID: {exc}", file=sys.stderr)

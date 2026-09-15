@@ -76,7 +76,7 @@ def test_main_returns_non_zero_for_invalid_evaluation(
     monkeypatch.setattr(
         runner,
         "build_service",
-        lambda: (StubService(ReceiptExtract(is_receipt=True)), None, Settings()),
+        lambda *_: (StubService(ReceiptExtract(is_receipt=True)), None, Settings()),
     )
 
     assert runner.main([]) == 1
@@ -117,3 +117,10 @@ def test_report_contains_metadata_and_case_latency(tmp_path: Path) -> None:
     assert report["metadata"]["prompt_hash"] == "deadbeef"
     assert report["summary"]["ok"] == "1/1"
     assert report["rows"][0]["latency_ms"] >= 0
+
+
+def test_run_metadata_records_selected_prompt_version() -> None:
+    metadata = runner.run_metadata(Settings(), "extraction-v2-evidence")
+
+    assert metadata["prompt_version"] == "extraction-v2-evidence"
+    assert metadata["prompt_hash"] != runner.run_metadata(Settings())["prompt_hash"]

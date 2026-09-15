@@ -60,6 +60,7 @@ def test_compare_reports_summarizes_output_and_metric_variance():
         "population_stdev": 0.0,
     }
     assert comparison["metrics"]["latency_ms"]["per_run"] == [100.0, 100.0]
+    assert comparison["configurations"][0]["model"] == "model-a"
 
 
 def test_compare_reports_rejects_incompatible_configuration():
@@ -80,3 +81,18 @@ def test_compare_reports_rejects_different_fixture_sets():
                 report(rows=[row("two.jpg", "10.00")]),
             ]
         )
+
+
+def test_compare_reports_allows_prompt_or_model_experiments_on_same_dataset():
+    comparison = compare_reports(
+        [
+            report(rows=[row("one.jpg", "10.00")], model="model-a"),
+            report(rows=[row("one.jpg", "10.00")], model="model-b"),
+        ],
+        allow_config_differences=True,
+    )
+
+    assert [config["model"] for config in comparison["configurations"]] == [
+        "model-a",
+        "model-b",
+    ]
