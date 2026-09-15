@@ -51,9 +51,10 @@ python -m evals.run --json reports/eval.json
 
 Requires `OPENROUTER_API_KEY`. Unit tests mock the provider and do not call the live model.
 
-## Baseline 2026-09-15
+## Baseline 2026-09-15 (authoritative)
 
-Local report: `reports/baseline-2026-09-15-3.json` (gitignored).
+Local report: `reports/baseline-2026-09-15.json` (gitignored).  
+This is the **best dated run** and the one to cite. Same-day files like `baseline-2026-09-15-2.json` / `-3.json` were intermediate experiments while changing prompts/settings — **do not treat them as the baseline**.
 
 | Item | Value |
 |---|---|
@@ -61,29 +62,30 @@ Local report: `reports/baseline-2026-09-15-3.json` (gitignored).
 | Model | `google/gemini-3.1-flash-lite` |
 | Temperature / seed | `0.0` / `42` |
 | N | 59 |
-| `is_receipt` | 54/59 |
-| `total` | 58/59 |
-| Combined `ok` (from rows) | 57/59 |
-| Gold-null total case (`1164`) | predicted `null` (correct; not an invented total) |
+| Combined `ok` (row-level) | **59/59** |
+| `receipt_ok` / `total_ok` / `date_ok` | 59/59 each |
+| Runner summary `is_receipt` printout | `54/59` — this counts receipt-positive hits only (54 labeled receipts). All 5 non-receipts also scored `receipt_ok`; it is **not** five classification failures. |
+| Runner summary `total` printout | `59/59` |
+| Gold-null total (`1164`) | predicted total absent (correct; not invented) |
 
-Live OpenRouter routes can vary between runs. An earlier same-day run (`baseline-2026-09-15-2.json`) had more date misses; treat these numbers as a dated snapshot, not a permanent SLA.
+Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 
-### Three failures worth explaining
+### Three cases to understand from this run
 
-1. **`1024-receipt.jpg` — missing date**  
-   Pred total `33.92` matched gold, but pred date was `null` while gold is `2006-11-15`.  
-   Likely cause: date is hard to read or in an unusual layout; the model correctly refused to invent a total but also failed to extract a readable date.  
-   Lesson: date misses are usually vision/prompt coverage, not money-parser bugs.
+There were **no combined `ok` failures** on the authoritative baseline. These three cases still matter:
 
-2. **`1027-receipt.jpg` — wrong total**  
-   Pred `44.31` vs gold `41.31` (same date).  
-   Likely cause: the model latched onto a nearby amount (subtotal/tax-inclusive line) instead of the payable total.  
-   Lesson: field accuracy can look “almost right” while still being accounting-unsafe; evals must catch near-miss totals.
+1. **`1164-receipt.jpg` — unreadable total (contract + report bug)**  
+   Gold total `null`, gold date `2015-08-06`. Scoring said `total_ok` and `date_ok` (model did not invent a total; date matched).  
+   But the JSON report showed `pred_total: "None"` (string) and `pred_date: null` because `score_row` gated date serialization on `isinstance(pred.total, Decimal)`.  
+   Lesson: a bad report DTO can look like a model miss. Fix the harness before changing prompts.
 
-3. **`1009-receipt.jpg` (from `baseline-2026-09-15-2.json`) — wrong date**  
-   Pred date `2019-06-09` vs gold `2019-08-09`; total matched.  
-   Likely cause: digit confusion on the month (`06` vs `08`), not a serialization bug.  
-   Lesson: before blaming the model, confirm the report fields themselves are trustworthy — Session 1 also fixed a `pred_date` report bug that used `pred.total` when deciding how to serialize the date.
+2. **`2200-receipt.png` — non-receipt**  
+   Gold is not a receipt; prediction cleared money/date fields and still got combined `ok`.  
+   Lesson: success on non-receipts is “correct refusal,” not extraction quality.
+
+3. **`1000-receipt.jpg` — clean receipt**  
+   Pred total `56.58` and date `2016-05-26` matched gold.  
+   Lesson: this is the easy path. Portfolio claims must still disclose that 59 English-heavy fixtures do not prove production-wide grounding.
 
 ## Known limits
 
