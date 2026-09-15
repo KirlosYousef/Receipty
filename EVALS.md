@@ -8,10 +8,11 @@ Receipty extracts structured receipt fields from image inputs. The evaluation su
 
 - Fixtures: 59 labeled images in `evals/fixtures/` (54 receipts, 5 non-receipts)
 - Labels: `evals/labels.jsonl` (human-curated, not model-generated)
+- Coverage and provenance: `evals/fixture_manifest.json`. The 54 receipt fixtures are from the [ExpressExpense Sample Receipt Dataset](https://expressexpense.com/blog/free-receipt-images-ocr-machine-learning-dataset/) (MIT); the five non-receipt fixture sources remain explicitly unverified.
 - Scored fields: receipt classification, total, transaction date
 - Logged, not scored: merchant (printed for inspection; name variance is noisy)
 - Intentional nulls: one receipt with a missing total; three receipts with missing dates
-- Current limitation: this set is still a curated English-heavy snapshot. It does not establish production-wide accuracy, Arabic/English mixed receipts, refunds, prompt-injection resistance, or poor-image robustness.
+- Current limitation: this set is a curated English, high-quality restaurant-receipt snapshot. It does not establish production-wide accuracy, Arabic/English mixed receipts, refunds, repeated totals, prompt-injection resistance, or poor-image robustness.
 
 ## Scoring contract
 
