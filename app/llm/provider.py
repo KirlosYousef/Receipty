@@ -83,6 +83,8 @@ class OpenRouterProvider:
             try:
                 return self._client.chat.completions.create(
                     model=self._settings.model,
+                    temperature=self._settings.temperature,
+                    seed=self._settings.seed,
                     messages=cast(list[ChatCompletionMessageParam], messages),
                     response_format={
                         "type": "json_schema",
@@ -98,8 +100,6 @@ class OpenRouterProvider:
                         }
                     },
                     timeout=attempt_timeout,
-                    temperature=self._settings.temperature,
-                    seed=self._settings.seed,
                 )
             except RateLimitError as e:
                 msg = str(e)

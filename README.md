@@ -7,7 +7,7 @@ Receipty is a production-minded FastAPI service: OpenRouter chat completions wit
 | Stack | |
 | --- | --- |
 | Runtime | Python 3.12, FastAPI, Uvicorn, Pydantic v2 |
-| Model | OpenAI SDK → [OpenRouter](https://openrouter.ai) (default `z-ai/glm-5.3-flash`) |
+| Model | OpenAI SDK → [OpenRouter](https://openrouter.ai) (default `google/gemini-3.1-flash-lite`) |
 | Data | SQLite ledger + JSONL cost log |
 | UI | Static scan-deck dashboard (multi-upload, review board, usage pulse) |
 | Quality | Ruff, Pyright, Pytest (≥80% branch coverage), GitHub Actions |
@@ -35,7 +35,7 @@ Aimed at AI / applied-ML engineering work: shipping an extraction system rather 
 | **Document / vision LLM** | Image ingest as a `data:{mime};base64,...` `image_url` (JPEG / PNG / WebP, max ~8 MB). Text paste uses the same prompt and post-rules. No classical OCR stack. |
 | **Locale-aware parsing** | `_money()` handles `1,234.56` vs `1.234,56`; a single separator plus three fractional digits is treated as ambiguous and becomes `null`. Dates accept several common formats; unparseable dates become `null`. |
 | **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Currency may be inferred from text hints (EGP / USD / EUR) only when unique. Negative totals need review. |
-| **Evaluation** | 21 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics: `is_receipt`, `total`, and `date`. Combined `ok` requires all three. `extraction_failed` is never a correct receipt classification. |
+| **Evaluation** | 59 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics: `is_receipt`, `total`, and `date`. Combined `ok` requires all three. `extraction_failed` is never a correct receipt classification. See [EVALS.md](EVALS.md). |
 | **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default so eval runs are comparable. Both are configurable. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
 | **Cost observability** | Per-call prompt/completion tokens and USD → `logs/cost.jsonl`; aggregated on `GET /v1/usage` and the dashboard. |
@@ -94,7 +94,7 @@ app/
   observability/  per-call cost JSONL
   static/         scan-deck dashboard
 evals/            fixtures, gold labels, runner, scoring
-reports/          JSON eval runs (prompt / scoring snapshots)
+EVALS.md          eval contract, dataset, how to run
 tests/            unit + API (mocked provider)
 ```
 
@@ -220,11 +220,12 @@ curl -s localhost:8000/v1/ingest/image \
 
 ## Evaluation
 
-21 labeled images under `evals/fixtures/` with gold labels in `evals/labels.jsonl` (16 receipts, 5 non-receipts; one receipt has a null total on purpose). Labels are the source of truth for the fields the harness scores.
+59 labeled images under `evals/fixtures/` with gold labels in `evals/labels.jsonl` (54 receipts, 5 non-receipts). The set includes a receipt with a null total and three receipts with null dates so missing values are scored, not guessed. Labels are the source of truth for the fields the harness scores. Dataset contract and run notes: [EVALS.md](EVALS.md).
 
 ```bash
 python -m evals.run
-# optional: python -m evals.run --json reports/latest.json
+# optional local report (gitignored)
+python -m evals.run --json reports/eval.json
 ```
 
 The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Per-file output covers receipt, total, and date; merchant is printed for inspection but is not a scored field.
@@ -264,7 +265,7 @@ Covered behavior includes:
 |-----|---------|
 | `OPENROUTER_API_KEY` | (required for live calls) |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
-| `MODEL` | `z-ai/glm-5.3-flash` |
+| `MODEL` | `google/gemini-3.1-flash-lite` |
 | `TEMPERATURE` | `0.0` |
 | `SEED` | `42` |
 | `DB_PATH` | `receipts.db` |
