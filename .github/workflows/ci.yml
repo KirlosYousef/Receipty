@@ -27,3 +27,5 @@ jobs:
         run: pytest tests/test_deterministic_eval_gate.py -q
       - name: Test with coverage
         run: pytest --cov
+      - name: Dependency vulnerability audit
+        run: pip-audit --strict
