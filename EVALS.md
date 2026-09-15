@@ -6,7 +6,7 @@ Receipty extracts structured receipt fields from image inputs. The evaluation su
 
 ## Dataset
 
-- Fixtures: 59 labeled images in `evals/fixtures/` (54 receipts, 5 non-receipts)
+- Fixtures: 60 labeled images in `evals/fixtures/` (55 receipts, 5 non-receipts)
 - Labels: `evals/labels.jsonl` (human-curated, not model-generated)
 - Coverage and provenance: `evals/fixture_manifest.json`. The 54 receipt fixtures are from the [ExpressExpense Sample Receipt Dataset](https://expressexpense.com/blog/free-receipt-images-ocr-machine-learning-dataset/) (MIT); the five non-receipt fixture sources remain explicitly unverified.
 - Scored fields: receipt classification, total, transaction date
@@ -58,7 +58,7 @@ free request; `null` truthfully means the provider did not supply the value.
 | Default model | `google/gemini-3.1-flash-lite` (override with `MODEL`) |
 | Temperature | `0.0` |
 | Seed | `42` (provider support varies) |
-| Fixtures | 59 labeled images |
+| Fixtures | 60 labeled images |
 | Labels | `evals/labels.jsonl` |
 | Command | `python -m evals.run` |
 
@@ -98,24 +98,24 @@ network, API-key, or model-cost dependency.
 
 ## Baseline 2026-09-15 (authoritative)
 
-Local report: `reports/baseline-2026-09-15-4.json` (gitignored).  
+Local report: `reports/baseline-2026-09-15-5.json` (gitignored).
 This is the **latest authoritative run** and the one to cite.
 
 | Item | Value |
 |---|---|
-| Commit | `a5a9eb1910da96befc647c9adc3601430e17b66b` |
+| Commit | `02b10a2b6c3b62fa6c8b15c202ed983343d5441b` |
 | Model | `google/gemini-3.1-flash-lite` |
 | Temperature / seed / prompt | `0.0` / `42` / `extraction-v1` (`0248b009…530bb6101b`) |
-| N | 59 |
-| Combined `ok` (row-level) | **59/59** |
-| `receipt_ok` / `total_ok` / `date_ok` | 59/59 each |
-| Runner summary `is_receipt` printout | `54/59` — this counts receipt-positive hits only (54 labeled receipts). All 5 non-receipts also scored `receipt_ok`; it is **not** five classification failures. |
-| Runner summary `total` printout | `59/59` |
+| N | 60 |
+| Combined `ok` (row-level) | **60/60** |
+| `receipt_ok` / `total_ok` / `date_ok` | 60/60 each |
+| Runner summary `is_receipt` printout | `55/60` — this counts receipt-positive hits only (55 labeled receipts). All 5 non-receipts also scored `receipt_ok`; it is **not** five classification failures. |
+| Runner summary `total` printout | `60/60` |
 | Receipt-only gold-null totals | 0/1 hallucinated (`1164`) |
 | Receipt-only gold-null dates | 0/3 hallucinated (`1008`, `1013`, `1024`) |
-| Latency | p50 `1,673.62ms`; p95 `4,181.05ms`; mean `2,046.98ms` (59 measurements) |
-| Tokens | 93,310 prompt + 4,004 completion = 97,314 total; mean 1,649.39 per case (59 measurements) |
-| Cost | `$0.029333` total; `$0.000497` mean per case (59 measurements) |
+| Latency | p50 `1,626.74ms`; p95 `3,068.19ms`; mean `1,909.21ms` (60 measurements) |
+| Tokens | 94,904 prompt + 4,074 completion = 98,978 total; mean 1,649.63 per case (60 measurements) |
+| Cost | `$0.029837` total; `$0.000497` mean per case (60 measurements) |
 
 Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 
