@@ -71,7 +71,37 @@ def compare_reports(
                     )
                     for rows in rows_by_file
                 ]
-            )
+            ),
+            "total_tokens": _metric_variance(
+                [
+                    _sum_or_none(
+                        [
+                            int(row["total_tokens"])
+                            for row in rows.values()
+                            if row.get("total_tokens") is not None
+                        ]
+                    )
+                    for rows in rows_by_file
+                ]
+            ),
+            "cost_usd": _metric_variance(
+                [
+                    _sum_or_none(
+                        [
+                            float(row["usd"])
+                            for row in rows.values()
+                            if row.get("usd") is not None
+                        ]
+                    )
+                    for rows in rows_by_file
+                ]
+            ),
+            "hallucinated_total_rate": _metric_variance(
+                [_hallucination_rate(rows.values(), "total") for rows in rows_by_file]
+            ),
+            "hallucinated_date_rate": _metric_variance(
+                [_hallucination_rate(rows.values(), "date") for rows in rows_by_file]
+            ),
         },
     }
 
@@ -141,8 +171,24 @@ def _mean(values: list[float | int]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
+def _sum_or_none(values: list[float | int]) -> float | int | None:
+    return sum(values) if values else None
+
+
 def _ratio(num: int, den: int) -> float | None:
     return None if den == 0 else num / den
+
+
+def _hallucination_rate(rows: Any, field: str) -> float | None:
+    eligible = [
+        row
+        for row in rows
+        if row.get("gold_is_receipt") is True and row.get(f"gold_{field}") is None
+    ]
+    hallucinations = sum(
+        1 for row in eligible if row.get(f"hallucinated_{field}") is True
+    )
+    return _ratio(hallucinations, len(eligible))
 
 
 def main(argv: list[str] | None = None) -> int:

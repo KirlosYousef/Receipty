@@ -17,7 +17,16 @@ def report(*, rows, model="model-a", prompt_hash="prompt-1"):
     }
 
 
-def row(file, total, latency_ms=100.0):
+def row(
+    file,
+    total,
+    latency_ms=100.0,
+    *,
+    total_tokens=100,
+    usd=0.001,
+    gold_total=10.0,
+    hallucinated_total=False,
+):
     return {
         "file": file,
         "receipt_ok": True,
@@ -31,7 +40,13 @@ def row(file, total, latency_ms=100.0):
         "pred_currency": "USD",
         "pred_date": "2026-01-01",
         "pred_tax": None,
+        "gold_is_receipt": True,
+        "gold_total": gold_total,
+        "hallucinated_total": hallucinated_total,
+        "hallucinated_date": False,
         "latency_ms": latency_ms,
+        "total_tokens": total_tokens,
+        "usd": usd,
     }
 
 
@@ -60,6 +75,12 @@ def test_compare_reports_summarizes_output_and_metric_variance():
         "population_stdev": 0.0,
     }
     assert comparison["metrics"]["latency_ms"]["per_run"] == [100.0, 100.0]
+    assert comparison["metrics"]["total_tokens"]["per_run"] == [200, 200]
+    assert comparison["metrics"]["cost_usd"]["per_run"] == [0.002, 0.002]
+    assert comparison["metrics"]["hallucinated_total_rate"]["per_run"] == [
+        None,
+        None,
+    ]
     assert comparison["configurations"][0]["model"] == "model-a"
 
 
