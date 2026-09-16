@@ -1,8 +1,9 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
-from app.api.deps import get_extraction_service, get_repo, get_settings
+from app.api.deps import get_extraction_service, get_indexer, get_repo, get_settings
 from app.core.config import Settings
 from app.core.exceptions import (
     CreditsExhausted,
@@ -10,13 +11,24 @@ from app.core.exceptions import (
     ProviderDeadlineExceeded,
     ProviderError,
 )
-from app.domain.schemas import IngestResponse, IngestTextRequest
+from app.domain.schemas import IngestResponse, IngestTextRequest, ReceiptExtract
 from app.repository.receipts import ReceiptRepository
 from app.services.extraction import ExtractionService
+from app.services.indexing import IndexingService
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp"}
+
+
+def _index_receipt(
+    indexer: IndexingService, receipt_id: int, extract: ReceiptExtract
+) -> None:
+    try:
+        indexer.index_receipt(receipt_id, extract)
+    except Exception:
+        log.exception("indexing_failed receipt_id=%s", receipt_id)
 
 
 def _map_provider_error(exc: ProviderError) -> HTTPException:
@@ -40,6 +52,7 @@ def ingest(
     request: Request,
     service: ExtractionService = Depends(get_extraction_service),
     repo: ReceiptRepository = Depends(get_repo),
+    indexer: IndexingService = Depends(get_indexer),
 ) -> IngestResponse:
     try:
         extract = service.extract_from_text(
@@ -48,7 +61,8 @@ def ingest(
         )
     except ProviderError as e:
         raise _map_provider_error(e) from e
-    repo.save(extract)
+    receipt_id = repo.save(extract)
+    _index_receipt(indexer, receipt_id, extract)
     return IngestResponse(extract=extract)
 
 
@@ -58,6 +72,7 @@ def ingest_image(
     file: UploadFile = File(...),
     service: ExtractionService = Depends(get_extraction_service),
     repo: ReceiptRepository = Depends(get_repo),
+    indexer: IndexingService = Depends(get_indexer),
     settings: Settings = Depends(get_settings),
 ) -> IngestResponse:
     mime = file.content_type or "image/jpeg"
@@ -74,7 +89,8 @@ def ingest_image(
         )
     except ProviderError as e:
         raise _map_provider_error(e) from e
-    repo.save(extract)
+    receipt_id = repo.save(extract)
+    _index_receipt(indexer, receipt_id, extract)
     return IngestResponse(extract=extract)
 
 

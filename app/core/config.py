@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     seed: int | None = 42
+    embedding_model: str = "openai/text-embedding-3-small"
 
     db_path: Path = Path("receipts.db")
     database_url: str | None = None

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.core.exceptions import ProviderError
+from app.llm.embeddings import HashEmbeddingProvider
 from app.main import create_app
 
 
@@ -63,6 +64,7 @@ def test_provider_is_reused_and_closed(tmp_path: Path):
     app = create_app(
         settings=settings,
         provider_factory=provider_factory,
+        embedding_factory=lambda _: HashEmbeddingProvider(),
     )
 
     with TestClient(app) as client:
