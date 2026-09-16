@@ -16,6 +16,7 @@ from app.observability.usage import UsageLogger
 from app.repository.receipts import build_repository
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
+from app.services.retrieval import RetrievalService, build_retrieval_repository
 
 STATIC_DIR = Path(__file__).parent / "static"
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -46,10 +47,16 @@ def create_app(
         service = ExtractionService(provider, usage)
         indexer = IndexingService(repo, embeddings)
         indexer.seed_static_documents()
+        retrieval_repo = build_retrieval_repository(
+            db_path=resolved_settings.db_path,
+            database_url=resolved_settings.database_url,
+        )
+        retrieval_service = RetrievalService(retrieval_repo, embeddings)
 
         app.state.repo = repo
         app.state.extraction_service = service
         app.state.indexer = indexer
+        app.state.retrieval_service = retrieval_service
 
         try:
             yield
