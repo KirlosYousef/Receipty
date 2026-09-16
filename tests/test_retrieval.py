@@ -13,6 +13,7 @@ from app.services.retrieval import (
     SqliteRetrievalRepository,
     cosine_similarity,
     hybrid_merge,
+    keyword_terms,
     postgres_keyword_query,
 )
 
@@ -110,3 +111,19 @@ def test_postgres_keyword_query_includes_kind_filter():
     assert sql.count("%s") == len(params)
     assert params == ["Amazon", "Amazon", "receipt", 3]
     assert "kind = %s" in sql
+
+
+def test_keyword_terms_drops_question_stopwords():
+    assert keyword_terms("How much did I spend at Amazon?") == ["Amazon"]
+
+
+def test_keyword_search_matches_merchant_in_natural_question(tmp_path: Path):
+    _seed(tmp_path)
+    retrieval = _build_retrieval(tmp_path)
+    results = retrieval.search(
+        "How much did I spend at Taco Bell?",
+        strategy="keyword",
+        limit=5,
+        kind="receipt",
+    )
+    assert any("Taco Bell" in row["content"] for row in results)

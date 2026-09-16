@@ -59,7 +59,9 @@ class AnsweringService:
         limit: int = 5,
         request_id: str | None = None,
     ) -> AnswerResponse:
-        documents = self._retrieval.search(question, strategy=strategy, limit=limit)
+        documents = self._retrieval.search(
+            question, strategy=strategy, limit=limit, kind="receipt"
+        )
         if not documents:
             return NOT_FOUND_ANSWER
 

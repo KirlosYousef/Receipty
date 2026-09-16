@@ -118,3 +118,15 @@ def test_answer_not_found_on_null_content(tmp_path: Path):
     service = _build_answering(tmp_path, FakeProvider(None))
     result = service.answer("Taco Bell total?")
     assert result.found is False
+
+
+def test_answer_searches_receipt_documents_only():
+    class CapturingRetrieval:
+        def search(self, query, *, strategy="hybrid", limit=5, kind=None):
+            self.kind = kind
+            return []
+
+    retrieval = CapturingRetrieval()
+    service = AnsweringService(FakeProvider(None), retrieval)  # type: ignore[arg-type]
+    service.answer("How much at Taco Bell?")
+    assert retrieval.kind == "receipt"

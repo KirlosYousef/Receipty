@@ -48,6 +48,7 @@ def create_app(
         service = ExtractionService(provider, usage)
         indexer = IndexingService(repo, embeddings)
         indexer.seed_static_documents()
+        indexer.index_existing_receipts()
         retrieval_repo = build_retrieval_repository(
             db_path=resolved_settings.db_path,
             database_url=resolved_settings.database_url,
