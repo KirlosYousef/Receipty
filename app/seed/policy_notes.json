@@ -1,0 +1,14 @@
+[
+  {
+    "id": "no-invented-totals",
+    "content": "Never invent a receipt total. If the amount is missing, unreadable, or ambiguous, store total as null and set outcome to needs_review."
+  },
+  {
+    "id": "not-receipt-clears-fields",
+    "content": "If the input is not a receipt, clear merchant, total, currency, date, and tax. Do not treat a parse failure as not_receipt."
+  },
+  {
+    "id": "currency-iso",
+    "content": "Store currency as an ISO code such as USD, EUR, or EGP. Map a copied $ to USD and € to EUR."
+  }
+]

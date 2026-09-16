@@ -269,6 +269,7 @@ Covered behavior includes:
 | `OPENROUTER_API_KEY` | (required for live calls) |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `MODEL` | `google/gemini-3.1-flash-lite` |
+| `EMBEDDING_MODEL` | `openai/text-embedding-3-small` |
 | `TEMPERATURE` | `0.0` |
 | `SEED` | `42` |
 | `DB_PATH` | `receipts.db` |
@@ -281,6 +282,6 @@ Covered behavior includes:
 
 ## Out of scope
 
-Auth, multi-tenant isolation, bank sync, line-item extraction, RAG / embeddings, classical OCR, fine-tuning, and guessing missing totals.
+Auth, multi-tenant isolation, bank sync, line-item extraction, classical OCR, fine-tuning, and guessing missing totals.
 
 Apache License 2.0 — see [LICENSE.md](LICENSE.md).

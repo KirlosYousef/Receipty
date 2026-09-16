@@ -10,21 +10,25 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.core.config import Settings, get_settings
+from app.llm.embeddings import EmbeddingProvider, OpenRouterEmbeddings
 from app.llm.provider import LLMProvider, OpenRouterProvider
 from app.observability.usage import UsageLogger
 from app.repository.receipts import build_repository
 from app.services.extraction import ExtractionService
+from app.services.indexing import IndexingService
 
 STATIC_DIR = Path(__file__).parent / "static"
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 ProviderFactory = Callable[[Settings], LLMProvider]
+EmbeddingFactory = Callable[[Settings], EmbeddingProvider]
 
 
 def create_app(
     *,
     settings: Settings | None = None,
     provider_factory: ProviderFactory = OpenRouterProvider,
+    embedding_factory: EmbeddingFactory = OpenRouterEmbeddings,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
 
@@ -37,11 +41,15 @@ def create_app(
         repo.init_db()
 
         provider = provider_factory(resolved_settings)
+        embeddings = embedding_factory(resolved_settings)
         usage = UsageLogger(resolved_settings.cost_log_path)
         service = ExtractionService(provider, usage)
+        indexer = IndexingService(repo, embeddings)
+        indexer.seed_static_documents()
 
         app.state.repo = repo
         app.state.extraction_service = service
+        app.state.indexer = indexer
 
         try:
             yield

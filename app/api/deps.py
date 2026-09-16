@@ -6,11 +6,13 @@ from app.core.config import get_settings
 from app.observability.usage import UsageLogger
 from app.repository.receipts import ReceiptRepository
 from app.services.extraction import ExtractionService
+from app.services.indexing import IndexingService
 
 __all__ = [
     "get_settings",
     "get_repo",
     "get_extraction_service",
+    "get_indexer",
 ]
 
 
@@ -27,3 +29,7 @@ def _usage_logger(path: str) -> UsageLogger:
 
 def get_extraction_service(request: Request) -> ExtractionService:
     return request.app.state.extraction_service
+
+
+def get_indexer(request: Request) -> IndexingService:
+    return request.app.state.indexer

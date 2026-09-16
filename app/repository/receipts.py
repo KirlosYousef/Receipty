@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Protocol
@@ -15,6 +16,12 @@ class ReceiptRepository(Protocol):
     def save(self, row: ReceiptExtract) -> int: ...
 
     def list_all(self) -> list[dict]: ...
+
+    def save_document(
+        self, kind: str, source_id: str, content: str, embedding: list[float]
+    ) -> int: ...
+
+    def list_documents(self) -> list[dict]: ...
 
     def close(self) -> None: ...
 
@@ -47,6 +54,17 @@ class SqliteReceiptRepository:
                     date TEXT,
                     tax TEXT,
                     outcome TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kind TEXT NOT NULL,
+                    source_id TEXT NOT NULL UNIQUE,
+                    content TEXT NOT NULL,
+                    embedding TEXT
                 )
                 """
             )
@@ -96,6 +114,37 @@ class SqliteReceiptRepository:
     def close(self) -> None:
         return
 
+    def save_document(
+        self, kind: str, source_id: str, content: str, embedding: list[float]
+    ) -> int:
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                """
+                INSERT INTO documents (kind, source_id, content, embedding)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(source_id) DO UPDATE SET
+                    kind=excluded.kind,
+                    content=excluded.content,
+                    embedding=excluded.embedding
+                """,
+                (kind, source_id, content, json.dumps(embedding)),
+            )
+            conn.commit()
+            return int(cur.lastrowid or 0)
+        finally:
+            conn.close()
+
+    def list_documents(self) -> list[dict]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT id, kind, source_id, content FROM documents ORDER BY id"
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
 
 class PostgresReceiptRepository:  # pragma: no cover
     """Postgres-backed repository.
@@ -113,7 +162,10 @@ class PostgresReceiptRepository:  # pragma: no cover
 
     def _connect(self) -> Any:
         if self._conn is None:
+            from pgvector.psycopg import register_vector
+
             self._conn = self._psycopg.connect(self._database_url, autocommit=True)
+            register_vector(self._conn)
         return self._conn
 
     def init_db(self) -> None:
@@ -133,6 +185,23 @@ class PostgresReceiptRepository:  # pragma: no cover
                     outcome TEXT,
                     embedding vector({EMBEDDING_DIMENSIONS})
                 )
+                """
+            )
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id BIGSERIAL PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    source_id TEXT NOT NULL UNIQUE,
+                    content TEXT NOT NULL,
+                    embedding vector({EMBEDDING_DIMENSIONS})
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS documents_embedding_hnsw
+                ON documents USING hnsw (embedding vector_cosine_ops)
                 """
             )
 
@@ -175,3 +244,34 @@ class PostgresReceiptRepository:  # pragma: no cover
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    def save_document(
+        self, kind: str, source_id: str, content: str, embedding: list[float]
+    ) -> int:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO documents (kind, source_id, content, embedding)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (source_id) DO UPDATE SET
+                    kind = EXCLUDED.kind,
+                    content = EXCLUDED.content,
+                    embedding = EXCLUDED.embedding
+                RETURNING id
+                """,
+                (kind, source_id, content, embedding),
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise RuntimeError("Postgres did not return an inserted document ID")
+            return int(result[0])
+
+    def list_documents(self) -> list[dict]:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, kind, source_id, content FROM documents ORDER BY id"
+            )
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.api.routes import _map_provider_error
 from app.core.config import Settings
 from app.core.exceptions import ProviderDeadlineExceeded
+from app.llm.embeddings import HashEmbeddingProvider
 from app.main import create_app
 
 
@@ -58,6 +59,7 @@ def client(tmp_path: Path):
     app = create_app(
         settings=settings,
         provider_factory=lambda _: fake_provider,
+        embedding_factory=lambda _: HashEmbeddingProvider(),
     )
 
     app.state.test_provider = fake_provider
@@ -105,6 +107,15 @@ def test_ingest_image_bad_mime(client: TestClient):
         files={"file": ("r.gif", b"fake", "image/gif")},
     )
     assert r.status_code == 400
+
+
+def test_ingest_indexes_receipt(client: TestClient):
+    client.post("/v1/ingest", json={"text": "Test Cafe TOTAL 12.50 USD"})
+    documents = client.app.state.repo.list_documents()
+    kinds = {row["kind"] for row in documents}
+    assert "receipt" in kinds
+    assert "merchant_alias" in kinds
+    assert "policy_note" in kinds
 
 
 def test_list_receipts(client: TestClient):
