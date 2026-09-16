@@ -131,6 +131,8 @@ class AskRequest(BaseModel):
 
 
 class AnswerResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     answer: str
-    citations: list[str] = Field(default_factory=list)
+    citations: list[str]
     found: bool
