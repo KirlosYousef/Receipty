@@ -34,7 +34,7 @@ Aimed at AI / applied-ML engineering work: shipping an extraction system rather 
 | **Hallucination control** | Prompt: copy visible fields, never invent, null if unreadable. Dates must be visibly present — no inferred calendar math. Invalid or fenced JSON → `outcome=extraction_failed` with no invented fields. |
 | **Document / vision LLM** | Image ingest as a `data:{mime};base64,...` `image_url` (JPEG / PNG / WebP, max ~8 MB). Text paste uses the same prompt and post-rules. No classical OCR stack. |
 | **Locale-aware parsing** | `_money()` handles `1,234.56` vs `1.234,56`; a single separator plus three fractional digits is treated as ambiguous and becomes `null`. Dates accept several common formats; unparseable dates become `null`. |
-| **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Currency may be inferred from text hints (EGP / USD / EUR) only when unique. Negative totals need review. |
+| **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Copied `$` / `€` and unique text hints map to ISO currency codes. Negative totals need review. |
 | **Evaluation** | 60 labeled fixtures (`evals/labels.jsonl`). Scoring runs the **production** `ExtractionService`. Metrics include class-conditional receipt, total, date, merchant, and available currency accuracy; tax is explicitly unavailable without labels. Combined `ok` requires receipt, total, and date. `extraction_failed` is never a correct receipt classification. See [EVALS.md](EVALS.md). |
 | **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default so eval runs are comparable. Both are configurable. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
@@ -228,7 +228,7 @@ python -m evals.run
 python -m evals.run --json reports/eval.json
 ```
 
-The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Per-file output covers receipt, total, and date; merchant is printed for inspection but is not a scored field.
+The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Per-file output covers receipt, total, date, merchant, and currency when labelled. Combined `ok` still requires only receipt, total, and date.
 
 | Metric | Rule |
 | --- | --- |

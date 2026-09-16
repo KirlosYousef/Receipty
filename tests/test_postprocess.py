@@ -42,3 +42,28 @@ def test_currency_inferred_when_missing():
     )
     out = apply_postprocess(row, "TOTAL 1.00 EGP")
     assert out.currency == "EGP"
+
+
+def test_copied_currency_symbol_normalizes_to_iso():
+    row = ReceiptExtract(
+        is_receipt=True, merchant="Shop", total=Decimal("1.00"), currency="$"
+    )
+    out = apply_postprocess(row, "image/jpeg")
+    assert out.currency == "USD"
+    assert out.outcome == Outcome.success
+
+
+def test_copied_euro_symbol_normalizes_to_iso():
+    row = ReceiptExtract(
+        is_receipt=True, merchant="Shop", total=Decimal("1.00"), currency="€"
+    )
+    out = apply_postprocess(row, "")
+    assert out.currency == "EUR"
+
+
+def test_iso_currency_is_preserved():
+    row = ReceiptExtract(
+        is_receipt=True, merchant="Shop", total=Decimal("1.00"), currency="USD"
+    )
+    out = apply_postprocess(row, "")
+    assert out.currency == "USD"

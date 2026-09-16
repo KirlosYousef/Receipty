@@ -13,9 +13,9 @@
 {"file": "1012-receipt.jpg", "is_receipt": true, "merchant": "HP Pho Ga", "total": 33.26, "currency": null, "date": "2019-04-01"}
 {"file": "1013-receipt.jpg", "is_receipt": true, "merchant": "Albetos Mexican Food", "total": 9.58, "currency": null, "date": null}
 {"file": "1014-receipt.jpg", "is_receipt": true, "merchant": "Loaded Cafe", "total": 48.53, "currency": null, "date": "2019-02-23"}
-{"file": "1015-receipt.jpg", "is_receipt": true, "merchant": "Deccan Spice", "total": 50.29, "currency": null, "date": "2017-03-10"}
-{"file": "1016-receipt.jpg", "is_receipt": true, "merchant": "Hammocks Trading Company", "total": 35.52, "currency": null, "date": "2019-02-02"}
-{"file": "1017-receipt.jpg", "is_receipt": true, "merchant": "Grotto Pizzeria & Tavern", "total": 11.04, "currency": null, "date": "2016-04-24"}
+{"file": "1015-receipt.jpg", "is_receipt": true, "merchant": "HAMMOCKS TRADING COMPANY", "total": 50.29, "currency": null, "date": "2017-03-10"}
+{"file": "1016-receipt.jpg", "is_receipt": true, "merchant": "Chef Wang", "total": 35.52, "currency": null, "date": "2019-02-02"}
+{"file": "1017-receipt.jpg", "is_receipt": true, "merchant": "UMIX", "total": 11.04, "currency": null, "date": "2016-04-24"}
 {"file": "1018-receipt.jpg", "is_receipt": true, "merchant": "In-N-Out Burger Santa Clara", "total": 2.17, "currency": null, "date": "2012-04-27"}
 {"file": "1019-receipt.jpg", "is_receipt": true, "merchant": "Grotto Pizzeria & Tavern", "total": 45.58, "currency": "USD", "date": "2017-05-12"}
 {"file": "1020-receipt.jpg", "is_receipt": true, "merchant": "Deccan Spice", "total": 47.02, "currency": "USD", "date": "2019-07-26"}

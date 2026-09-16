@@ -94,6 +94,7 @@ def score_row(pred: ReceiptExtract, gold: dict[str, Any]) -> dict[str, Any]:
         "pred_tax": None if pred.tax is None else str(pred.tax),
         "gold_merchant": gold.get("merchant"),
         "gold_total": gold_total_value(gold),
+        "gold_currency": gold.get("currency"),
         "gold_date": gold.get("date"),
         "gold_is_receipt": bool(gold.get("is_receipt")),
     }

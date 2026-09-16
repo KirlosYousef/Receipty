@@ -53,3 +53,15 @@ def test_manifest_rejects_missing_and_orphaned_entries() -> None:
             label_files={"present.jpg", "missing.jpg"},
             fixture_files={"present.jpg", "orphan.jpg"},
         )
+
+
+def test_corrected_merchants_match_printed_fixture_names() -> None:
+    labels = {
+        json.loads(line)["file"]: json.loads(line)
+        for line in LABELS.read_text().splitlines()
+        if line
+    }
+
+    assert labels["1015-receipt.jpg"]["merchant"] == "HAMMOCKS TRADING COMPANY"
+    assert labels["1016-receipt.jpg"]["merchant"] == "Chef Wang"
+    assert labels["1017-receipt.jpg"]["merchant"] == "UMIX"
