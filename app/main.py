@@ -14,6 +14,7 @@ from app.llm.embeddings import EmbeddingProvider, OpenRouterEmbeddings
 from app.llm.provider import LLMProvider, OpenRouterProvider
 from app.observability.usage import UsageLogger
 from app.repository.receipts import build_repository
+from app.services.answering import AnsweringService
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
 from app.services.retrieval import RetrievalService, build_retrieval_repository
@@ -52,11 +53,13 @@ def create_app(
             database_url=resolved_settings.database_url,
         )
         retrieval_service = RetrievalService(retrieval_repo, embeddings)
+        answering_service = AnsweringService(provider, retrieval_service)
 
         app.state.repo = repo
         app.state.extraction_service = service
         app.state.indexer = indexer
         app.state.retrieval_service = retrieval_service
+        app.state.answering_service = answering_service
 
         try:
             yield

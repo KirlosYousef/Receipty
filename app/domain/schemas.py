@@ -122,3 +122,15 @@ class IngestTextRequest(BaseModel):
 
 class IngestResponse(BaseModel):
     extract: ReceiptExtract
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1)
+    strategy: str = "hybrid"
+    limit: int = 5
+
+
+class AnswerResponse(BaseModel):
+    answer: str
+    citations: list[str] = Field(default_factory=list)
+    found: bool
