@@ -3,7 +3,13 @@ import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
-from app.api.deps import get_extraction_service, get_indexer, get_repo, get_settings
+from app.api.deps import (
+    get_extraction_service,
+    get_indexer,
+    get_repo,
+    get_retrieval_service,
+    get_settings,
+)
 from app.core.config import Settings
 from app.core.exceptions import (
     CreditsExhausted,
@@ -15,6 +21,7 @@ from app.domain.schemas import IngestResponse, IngestTextRequest, ReceiptExtract
 from app.repository.receipts import ReceiptRepository
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
+from app.services.retrieval import RetrievalService
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -97,6 +104,23 @@ def ingest_image(
 @router.get("/v1/receipts")
 def receipts(repo: ReceiptRepository = Depends(get_repo)) -> list[dict]:
     return repo.list_all()
+
+
+@router.get("/v1/search")
+def search(
+    q: str,
+    strategy: str = "hybrid",
+    limit: int = 5,
+    kind: str | None = None,
+    retrieval: RetrievalService = Depends(get_retrieval_service),
+) -> list[dict]:
+    if not q.strip():
+        raise HTTPException(400, "query must not be empty")
+    if strategy not in {"keyword", "dense", "hybrid"}:
+        raise HTTPException(400, "strategy must be keyword, dense, or hybrid")
+    if limit < 1 or limit > 50:
+        raise HTTPException(400, "limit must be between 1 and 50")
+    return retrieval.search(q, strategy=strategy, limit=limit, kind=kind)
 
 
 @router.get("/v1/usage")

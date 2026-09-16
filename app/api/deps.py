@@ -7,12 +7,14 @@ from app.observability.usage import UsageLogger
 from app.repository.receipts import ReceiptRepository
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
+from app.services.retrieval import RetrievalService
 
 __all__ = [
     "get_settings",
     "get_repo",
     "get_extraction_service",
     "get_indexer",
+    "get_retrieval_service",
 ]
 
 
@@ -33,3 +35,7 @@ def get_extraction_service(request: Request) -> ExtractionService:
 
 def get_indexer(request: Request) -> IndexingService:
     return request.app.state.indexer
+
+
+def get_retrieval_service(request: Request) -> RetrievalService:
+    return request.app.state.retrieval_service
