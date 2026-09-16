@@ -1,10 +1,35 @@
+from __future__ import annotations
+
 import sqlite3
 from pathlib import Path
+from typing import Any, Protocol
 
 from app.domain.schemas import ReceiptExtract
 
+EMBEDDING_DIMENSIONS = 1536
 
-class ReceiptRepository:
+
+class ReceiptRepository(Protocol):
+    def init_db(self) -> None: ...
+
+    def save(self, row: ReceiptExtract) -> int: ...
+
+    def list_all(self) -> list[dict]: ...
+
+    def close(self) -> None: ...
+
+
+def build_repository(
+    *,
+    db_path: Path | None = None,
+    database_url: str | None = None,
+) -> ReceiptRepository:
+    if database_url:
+        return PostgresReceiptRepository(database_url)
+    return SqliteReceiptRepository(db_path or Path("receipts.db"))
+
+
+class SqliteReceiptRepository:
     def __init__(self, db_path: Path):
         self._db_path = db_path
 
@@ -67,3 +92,86 @@ class ReceiptRepository:
             return [dict(r) for r in rows]
         finally:
             conn.close()
+
+    def close(self) -> None:
+        return
+
+
+class PostgresReceiptRepository:  # pragma: no cover
+    """Postgres-backed repository.
+
+    Excluded from CI coverage: it requires a live Postgres instance.
+    Run ``docker compose up`` and ``TEST_DATABASE_URL=... pytest`` to exercise it.
+    """
+
+    def __init__(self, database_url: str):
+        import psycopg
+
+        self._psycopg = psycopg
+        self._database_url = database_url
+        self._conn: Any = None
+
+    def _connect(self) -> Any:
+        if self._conn is None:
+            self._conn = self._psycopg.connect(self._database_url, autocommit=True)
+        return self._conn
+
+    def init_db(self) -> None:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS receipts (
+                    id BIGSERIAL PRIMARY KEY,
+                    is_receipt BOOLEAN NOT NULL,
+                    merchant TEXT,
+                    total TEXT,
+                    currency TEXT,
+                    date TEXT,
+                    tax TEXT,
+                    outcome TEXT,
+                    embedding vector({EMBEDDING_DIMENSIONS})
+                )
+                """
+            )
+
+    def save(self, row: ReceiptExtract) -> int:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO receipts
+                (is_receipt, merchant, total, currency, date, tax, outcome)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    row.is_receipt,
+                    row.merchant,
+                    str(row.total) if row.total is not None else None,
+                    row.currency,
+                    str(row.date) if row.date is not None else None,
+                    str(row.tax) if row.tax is not None else None,
+                    row.outcome if row.outcome is not None else None,
+                ),
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise RuntimeError("Postgres did not return an inserted receipt ID")
+            return int(result[0])
+
+    def list_all(self) -> list[dict]:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, is_receipt, merchant, total, currency, date, tax, outcome "
+                "FROM receipts ORDER BY id DESC"
+            )
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]
+
+    def close(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
