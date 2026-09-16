@@ -186,25 +186,62 @@ This is the **latest authoritative run** and the one to cite.
 
 Live OpenRouter routes can still vary between future runs. Re-record commit SHA, model, temperature, and seed whenever you claim a new baseline.
 
-### Notable cases from this run
+## Failures and measured changes
 
-There were **no combined `ok` failures** on the authoritative baseline. These cases document the scoring contract:
+Combined `ok` is 60/60 on the current labelled set. These three failures are still
+real: they hid in report serialization, gold labels, or un-scored fields.
 
-1. **`1164-receipt.jpg` — unreadable total**  
-   Gold total `null`, gold date `2015-08-06`. Scoring reported `total_ok` and `date_ok` (no invented total; date matched).  
-   The JSON report previously showed `pred_total: "None"` (string) and `pred_date: null` because `score_row` gated date serialization on `isinstance(pred.total, Decimal)`. Report fields are now serialized from the matching prediction attributes.
+### 1. Null-total reports dropped `pred_date` (fixed)
 
-2. **`2200-receipt.png` — non-receipt**  
-   Gold is not a receipt; prediction cleared money/date fields and still received combined `ok`. Correct refusal is scored separately from receipt-field extraction quality.
+**Evidence:** `1164-receipt.jpg` has gold total `null` and gold date `2015-08-06`.
+The model returned a matching date and no total, so scoring was `total_ok` and
+`date_ok`. The JSON report still wrote `pred_total: "None"` (the string) and
+`pred_date: null`, because `score_row` serialized the date only when
+`pred.total` was a `Decimal`.
 
-3. **`1000-receipt.jpg` — clean receipt**  
-   Pred total `56.58` and date `2016-05-26` matched gold. Scores on this curated English-heavy set do not establish production-wide grounding.
+**Change:** serialize `pred_total` from `pred.total` and `pred_date` from
+`pred.date`. A later 60-case run (`baseline-2026-09-15-5.json` and `reports/v1.json`)
+shows `1164` as `pred_total: null`, `pred_date: "2015-08-06"`.
+
+### 2. Three gold merchants contradicted the fixture images (fixed)
+
+**Evidence:** on `reports/v1.json`, merchant accuracy was 48/55. Three of the
+seven misses were label errors, confirmed against the images:
+
+| File | Wrong gold | Printed merchant | Total / date still matched |
+|---|---|---|---|
+| `1015-receipt.jpg` | Deccan Spice | HAMMOCKS TRADING COMPANY | 50.29 / 2017-03-10 |
+| `1016-receipt.jpg` | Hammocks Trading Company | Chef Wang | 35.52 / 2019-02-02 |
+| `1017-receipt.jpg` | Grotto Pizzeria & Tavern | UMIX | 11.04 / 2016-04-24 |
+
+Combined `ok` stayed green because merchant is not part of that metric.
+
+**Change:** replace those three gold merchants with the printed names. Replaying
+the same `v1.json` predictions against the corrected labels yields **51/55**
+merchant hits. Remaining misses are extra store numbers or location words
+(`Taco Bell 017314`, `Thai Gusto` vs `Thai GUSTO Restaurant`, `ESQUIRE GRILLE`
+vs the airport-qualified gold, `DEL FRISCO'S` vs `#8620`).
+
+### 3. Copied `$` failed ISO currency scoring (fixed)
+
+**Evidence:** 31 receipts have an explicit gold currency of `USD`. On
+`reports/v1.json`, currency accuracy was **2/31**. The model copied a visible
+`$` on 29 of those cases; `1145-receipt.jpg` returned `null` and
+`needs_review`. Post-processing only inferred currency when the field was
+already `null`, and image evals pass the MIME type as that hint, so `$` was
+stored as `$`.
+
+**Change:** `apply_postprocess` now maps copied aliases (`$` → `USD`, `€` →
+`EUR`, case-insensitive `usd` / `egp` / `eur`) to ISO codes. Replaying that
+normalization on `v1.json` would score **30/31**. The remaining miss is `1145`,
+which still has no predicted currency. Re-run the live suite before citing a
+new authoritative currency number.
 
 ## Known limits
 
 - A schema-valid model prediction is not evidence that every field is visually grounded in the input.
 - The dataset is curated; do not claim production-wide accuracy from these scores.
 - Low-confidence, unreadable, or ambiguous financial fields must remain reviewable rather than guessed.
-- Merchant is inspected in the runner output but is not part of combined `ok`.
+- Merchant is scored with normalized matching but is not part of combined `ok`. Extra store numbers and location words still fail that field.
 - Hallucination rates cover one gold-null receipt total and three gold-null receipt dates; more unreadable-field fixtures are needed before treating zero hallucinations as a durable claim.
 - The deterministic CI gate is intentionally small; it does not replace the live labelled baseline.

@@ -18,6 +18,13 @@ def infer_currency(text: str) -> str | None:
     return uniq[0] if len(uniq) == 1 else None
 
 
+def normalize_currency(value: str | None) -> str | None:
+    """Map copied symbols and aliases to ISO codes; leave unknown values unchanged."""
+    if value is None:
+        return None
+    return CODES.get(value.strip().casefold(), value)
+
+
 def apply_postprocess(row: ReceiptExtract, currency_hint: str) -> ReceiptExtract:
     if not row.is_receipt:
         row.merchant = None
@@ -32,4 +39,6 @@ def apply_postprocess(row: ReceiptExtract, currency_hint: str) -> ReceiptExtract
         row.outcome = Outcome.needs_review
     if row.currency is None:
         row.currency = infer_currency(currency_hint)
+    else:
+        row.currency = normalize_currency(row.currency)
     return row
