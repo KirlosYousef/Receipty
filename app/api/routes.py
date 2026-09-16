@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.api.deps import (
+    get_answering_service,
     get_extraction_service,
     get_indexer,
     get_repo,
@@ -17,8 +18,15 @@ from app.core.exceptions import (
     ProviderDeadlineExceeded,
     ProviderError,
 )
-from app.domain.schemas import IngestResponse, IngestTextRequest, ReceiptExtract
+from app.domain.schemas import (
+    AnswerResponse,
+    AskRequest,
+    IngestResponse,
+    IngestTextRequest,
+    ReceiptExtract,
+)
 from app.repository.receipts import ReceiptRepository
+from app.services.answering import AnsweringService
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
 from app.services.retrieval import RetrievalService
@@ -121,6 +129,24 @@ def search(
     if limit < 1 or limit > 50:
         raise HTTPException(400, "limit must be between 1 and 50")
     return retrieval.search(q, strategy=strategy, limit=limit, kind=kind)
+
+
+@router.post("/v1/ask", response_model=AnswerResponse)
+def ask(
+    req: AskRequest,
+    request: Request,
+    answering: AnsweringService = Depends(get_answering_service),
+) -> AnswerResponse:
+    if req.strategy not in {"keyword", "dense", "hybrid"}:
+        raise HTTPException(400, "strategy must be keyword, dense, or hybrid")
+    if req.limit < 1 or req.limit > 20:
+        raise HTTPException(400, "limit must be between 1 and 20")
+    return answering.answer(
+        req.question,
+        strategy=req.strategy,
+        limit=req.limit,
+        request_id=request.state.request_id,
+    )
 
 
 @router.get("/v1/usage")

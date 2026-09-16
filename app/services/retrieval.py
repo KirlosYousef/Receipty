@@ -28,6 +28,59 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
+_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "of",
+        "to",
+        "in",
+        "on",
+        "at",
+        "for",
+        "how",
+        "much",
+        "did",
+        "do",
+        "does",
+        "was",
+        "were",
+        "is",
+        "are",
+        "i",
+        "my",
+        "me",
+        "we",
+        "what",
+        "which",
+        "who",
+        "when",
+        "where",
+        "why",
+        "spend",
+        "spent",
+        "have",
+        "had",
+        "any",
+        "from",
+        "with",
+        "about",
+    }
+)
+
+
+def keyword_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    for raw in query.split():
+        term = raw.strip("?,.!'\"")
+        if term and term.lower() not in _STOPWORDS:
+            terms.append(term)
+    return terms or [part for part in query.split() if part]
+
+
 def hybrid_merge(
     keyword_results: list[dict],
     dense_results: list[dict],
@@ -55,6 +108,26 @@ def hybrid_merge(
     return [{**docs[source_id], "score": scores[source_id]} for source_id in ranked]
 
 
+def postgres_keyword_query(
+    query: str, *, limit: int, kind: str | None
+) -> tuple[str, list[Any]]:
+    terms = " ".join(keyword_terms(query))
+    sql = (
+        "SELECT id, kind, source_id, content, "
+        "ts_rank_cd(to_tsvector('english', content), "
+        "plainto_tsquery('english', %s)) AS score "
+        "FROM documents WHERE to_tsvector('english', content) "
+        "@@ plainto_tsquery('english', %s)"
+    )
+    params: list[Any] = [terms, terms]
+    if kind:
+        sql += " AND kind = %s"
+        params.append(kind)
+    sql += " ORDER BY score DESC LIMIT %s"
+    params.append(limit)
+    return sql, params
+
+
 class SqliteRetrievalRepository:
     def __init__(self, db_path: Any):
         import sqlite3
@@ -70,7 +143,9 @@ class SqliteRetrievalRepository:
     def search_keyword(self, query: str, *, limit: int, kind: str | None) -> list[dict]:
         conn = self._connect()
         try:
-            terms = query.split()
+            terms = keyword_terms(query)
+            if not terms:
+                return []
             clauses = " AND ".join(["content LIKE ?" for _ in terms])
             sql = f"SELECT id, kind, source_id, content FROM documents WHERE {clauses}"
             params: list[Any] = [f"%{term}%" for term in terms]
@@ -131,17 +206,7 @@ class PostgresRetrievalRepository:  # pragma: no cover
     def search_keyword(self, query: str, *, limit: int, kind: str | None) -> list[dict]:
         conn = self._connect()
         with conn.cursor() as cur:
-            sql = (
-                "SELECT id, kind, source_id, content, "
-                "ts_rank_cd(to_tsvector('english', content), plainto_tsquery('english', %s)) AS score "
-                "FROM documents WHERE to_tsvector('english', content) @@ plainto_tsquery('english', %s)"
-            )
-            params: list[Any] = [query]
-            if kind:
-                sql += " AND kind = %s"
-                params.append(kind)
-            sql += " ORDER BY score DESC LIMIT %s"
-            params.append(limit)
+            sql, params = postgres_keyword_query(query, limit=limit, kind=kind)
             cur.execute(sql, params)
             columns = [desc[0] for desc in cur.description]
             return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]

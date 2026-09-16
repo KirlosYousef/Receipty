@@ -80,6 +80,24 @@ def test_openrouter_embed_rejects_wrong_dimension():
         provider.embed("receipt")
 
 
+def test_index_existing_receipts_backfills_unindexed_rows(tmp_path):
+    repo = SqliteReceiptRepository(tmp_path / "receipts.db")
+    repo.init_db()
+    extract = ReceiptExtract(
+        is_receipt=True,
+        merchant="Uncle Julio's",
+        total=Decimal("46.73"),
+        currency="USD",
+        date="2019-05-18",
+        outcome=Outcome.success,
+    )
+    receipt_id = repo.save(extract)
+    indexer = IndexingService(repo, HashEmbeddingProvider())
+    indexer.index_existing_receipts()
+    source_ids = {row["source_id"] for row in repo.list_documents()}
+    assert f"receipt:{receipt_id}" in source_ids
+
+
 def test_non_receipt_is_not_indexed(tmp_path):
     repo = SqliteReceiptRepository(tmp_path / "receipts.db")
     repo.init_db()

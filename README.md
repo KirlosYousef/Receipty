@@ -171,6 +171,7 @@ Compose stores SQLite in a Docker-managed `receipty_data` volume at `/app/data/r
 | POST | `/v1/ingest/image` | multipart file (`jpeg` / `png` / `webp`, max ~8 MB) |
 | GET | `/v1/receipts` | SQLite ledger (newest first) |
 | GET | `/v1/search` | Query `?q=...&strategy=keyword\|dense\|hybrid&limit=5&kind=receipt\|merchant_alias\|policy_note` |
+| POST | `/v1/ask` | JSON `{"question": "...", "strategy": "hybrid", "limit": 5}` → `{answer, citations, found}` |
 | GET | `/v1/usage` | Aggregated cost / tokens (last 50 call rows) |
 
 Interactive OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs).

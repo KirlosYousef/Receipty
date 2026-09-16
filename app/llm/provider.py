@@ -31,6 +31,7 @@ class LLMProvider(Protocol):
         messages: list[dict[str, Any]],
         *,
         request_id: str | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> Any: ...
 
     def close(self) -> None: ...
@@ -64,6 +65,7 @@ class OpenRouterProvider:
         messages: list[dict[str, Any]],
         *,
         request_id: str | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> Any:
         started_at = self._clock()
         last: BaseException | None = None
@@ -81,26 +83,30 @@ class OpenRouterProvider:
             )
 
             try:
-                return self._client.chat.completions.create(
-                    model=self._settings.model,
-                    temperature=self._settings.temperature,
-                    seed=self._settings.seed,
-                    messages=cast(list[ChatCompletionMessageParam], messages),
-                    response_format={
+                kwargs: dict[str, Any] = {
+                    "model": self._settings.model,
+                    "temperature": self._settings.temperature,
+                    "seed": self._settings.seed,
+                    "messages": cast(list[ChatCompletionMessageParam], messages),
+                    "extra_body": {
+                        "provider": {
+                            "require_parameters": True,
+                        }
+                    },
+                    "timeout": attempt_timeout,
+                }
+                if response_format is None:
+                    kwargs["response_format"] = {
                         "type": "json_schema",
                         "json_schema": {
                             "name": "receipt_extraction",
                             "strict": True,
                             "schema": ReceiptLLMOutput.model_json_schema(),
                         },
-                    },
-                    extra_body={
-                        "provider": {
-                            "require_parameters": True,
-                        }
-                    },
-                    timeout=attempt_timeout,
-                )
+                    }
+                elif response_format:
+                    kwargs["response_format"] = response_format
+                return self._client.chat.completions.create(**kwargs)
             except RateLimitError as e:
                 msg = str(e)
                 if "Daily limit" in msg or "limit_rpd" in msg:

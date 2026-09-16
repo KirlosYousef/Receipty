@@ -28,6 +28,22 @@ Reply with JSON only, no markdown.
 DEFAULT_PROMPT_VERSION = "extraction-v1"
 EXTRACTION_PROMPT = EXTRACTION_PROMPTS[DEFAULT_PROMPT_VERSION]
 
+ANSWER_PROMPT = """You are a receipt assistant. Answer the user's question using ONLY the
+provided context. Each context item is tagged with a source_id such as
+"receipt:5", "alias:...", or "policy:...".
+
+Rules:
+- Answer using only information present in the context. Never fabricate.
+- List every source_id you used in the "citations" field.
+- If the context does not contain the answer, set "found" to false, leave
+  "citations" empty, and set "answer" to a short message saying you could not
+  find a relevant receipt.
+- Keep the answer concise.
+
+Reply with JSON only, no markdown, matching this shape:
+{"answer": "...", "citations": ["receipt:5"], "found": true}
+"""
+
 
 def prompt_for(version: str) -> str:
     try:
