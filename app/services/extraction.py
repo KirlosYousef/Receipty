@@ -26,9 +26,16 @@ class UsageLogger(Protocol):
 
 
 class ExtractionService:
-    def __init__(self, provider: LLMProvider, usage: UsageLogger | None = None):
+    def __init__(
+        self,
+        provider: LLMProvider,
+        usage: UsageLogger | None = None,
+        *,
+        prompt: str = EXTRACTION_PROMPT,
+    ):
         self._provider = provider
         self._usage = usage
+        self._prompt = prompt
 
     def extract_from_text(
         self,
@@ -37,7 +44,7 @@ class ExtractionService:
         request_id: str | None = None,
     ) -> ReceiptExtract:
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": EXTRACTION_PROMPT},
+            {"role": "system", "content": self._prompt},
             {"role": "user", "content": text},
         ]
         return self._run(
@@ -56,7 +63,7 @@ class ExtractionService:
     ) -> ReceiptExtract:
         data_url = f"data:{mime};base64,{base64.b64encode(image_bytes).decode()}"
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": EXTRACTION_PROMPT},
+            {"role": "system", "content": self._prompt},
             {
                 "role": "user",
                 "content": [{"type": "image_url", "image_url": {"url": data_url}}],

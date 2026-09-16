@@ -8,7 +8,7 @@ Receipty extracts structured receipt fields from image inputs. The evaluation su
 
 - Fixtures: 60 labeled images in `evals/fixtures/` (55 receipts, 5 non-receipts)
 - Labels: `evals/labels.jsonl` (human-curated, not model-generated)
-- Coverage and provenance: `evals/fixture_manifest.json`. The 54 receipt fixtures are from the [ExpressExpense Sample Receipt Dataset](https://expressexpense.com/blog/free-receipt-images-ocr-machine-learning-dataset/) (MIT); the five non-receipt fixture sources remain explicitly unverified.
+- Coverage and provenance: `evals/fixture_manifest.json`. The 55 receipt fixtures are from the [ExpressExpense Sample Receipt Dataset](https://expressexpense.com/blog/free-receipt-images-ocr-machine-learning-dataset/) (MIT); the five non-receipt fixture sources remain explicitly unverified.
 - Scored fields: receipt classification, total, transaction date, normalized merchant
 - Partially scored: currency, only where its gold label is explicit
 - Unavailable: tax accuracy and `needs_review` precision/recall, because the current labels do not supply tax or expected-review decisions
@@ -51,10 +51,55 @@ fixture/label paths to compare live-model variation:
 python -m evals.compare reports/run-a.json reports/run-b.json --json reports/variance.json
 ```
 
-The comparison reports per-run field hits, mean per-run latency, and the files
-whose complete predictions changed. It rejects incompatible configurations or
-fixture sets rather than silently combining them. Commit SHA may differ: a
-comparison can intentionally measure the impact of a code change.
+The comparison reports per-run field hits, mean per-run latency, total tokens,
+total cost, receipt-only hallucination rates, and the files whose complete
+predictions changed. It rejects incompatible configurations or fixture sets
+rather than silently combining them. Commit SHA may differ: a comparison can
+intentionally measure the impact of a code change.
+
+## Prompt and model experiments
+
+The runner selects a versioned prompt, records its version and SHA-256 hash,
+and accepts the model through the existing `MODEL` environment variable. Run
+each candidate against the same fixture set, then compare them explicitly:
+
+```bash
+python -m evals.run --prompt-version extraction-v1 --json reports/v1.json
+python -m evals.run --prompt-version extraction-v2-evidence --json reports/v2.json
+python -m evals.compare --allow-config-differences reports/v1.json reports/v2.json
+```
+
+Use `--allow-config-differences` only for intentional prompt/model experiments.
+It still requires identical fixture and label paths and emits every run's model,
+temperature, seed, prompt version, and prompt hash alongside the results.
+
+### Prompt experiment 2026-09-16
+
+Local reports: `reports/v1.json` and `reports/v2.json` (gitignored).
+Same model (`google/gemini-3.1-flash-lite`), temperature `0.0`, seed `42`,
+labels, and fixtures. The only intended difference is the prompt.
+
+| Metric | `extraction-v1` | `extraction-v2-evidence` |
+|---|---|---|
+| Combined `ok` | 60/60 | 60/60 |
+| Receipt / total / date | 60/60 each | 60/60 each |
+| Hallucinated total / date | 0/1, 0/3 | 0/1, 0/3 |
+| Merchant (scored when labelled) | 48/55 | 47/55 |
+| Currency (scored when labelled) | 2/31 | 1/31 |
+| Latency p50 / p95 / mean | 1,767ms / 2,784ms / 1,953ms | 1,798ms / 2,638ms / 1,835ms |
+| Tokens | 98,978 | 95,217 |
+| Cost | `$0.029837` | `$0.028771` |
+| Changed predictions | — | 12/60 files |
+
+A second independent v1/v2 comparison reproduced the same 12-file set and the
+same merchant/currency deltas. That is a prompt effect, not one-run noise.
+
+`extraction-v2-evidence` remains a documented experiment, not the production
+prompt. It did not improve the extraction contract. It often copied `$` or
+left currency `null`, which moved correct totals into `needs_review`, and it
+shortened some merchant names (`McDonald's Restaurant #3100` → `McDonald's`).
+Keep `extraction-v1` until a later experiment beats it on `ok`, hallucination
+rate, or a labelled review metric.
 
 ## Operational metrics
 
@@ -81,6 +126,7 @@ free request; `null` truthfully means the provider did not supply the value.
 | Seed | `42` (provider support varies) |
 | Fixtures | 60 labeled images |
 | Labels | `evals/labels.jsonl` |
+| Default prompt | `extraction-v1` (override with `--prompt-version`) |
 | Command | `python -m evals.run` |
 
 Live LLM evaluation can vary by model and OpenRouter route. Record `MODEL`, temperature, seed, and commit SHA when comparing runs.
