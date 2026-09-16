@@ -14,6 +14,7 @@ from app.services.retrieval import (
     cosine_similarity,
     hybrid_merge,
     keyword_terms,
+    lexical_rerank,
     postgres_keyword_query,
 )
 
@@ -126,4 +127,29 @@ def test_keyword_search_matches_merchant_in_natural_question(tmp_path: Path):
         limit=5,
         kind="receipt",
     )
+    assert any("Taco Bell" in row["content"] for row in results)
+
+
+def test_lexical_rerank_promotes_term_match():
+    documents = [
+        {
+            "source_id": "policy:1",
+            "content": "Never invent a receipt total.",
+            "kind": "policy_note",
+        },
+        {
+            "source_id": "receipt:3",
+            "content": "Receipt 3. Merchant: Uncle Julio's.",
+            "kind": "receipt",
+        },
+    ]
+    ranked = lexical_rerank("Uncle Julio's", documents, limit=2)
+    assert ranked[0]["source_id"] == "receipt:3"
+
+
+def test_hybrid_rerank_returns_limited_results(tmp_path: Path):
+    _seed(tmp_path)
+    retrieval = _build_retrieval(tmp_path)
+    results = retrieval.search("Taco Bell", strategy="hybrid_rerank", limit=3)
+    assert len(results) <= 3
     assert any("Taco Bell" in row["content"] for row in results)

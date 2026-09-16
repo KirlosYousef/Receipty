@@ -6,6 +6,10 @@ from typing import Any, Protocol
 
 from app.llm.embeddings import EmbeddingProvider
 
+SEARCH_STRATEGIES = ("keyword", "dense", "hybrid", "hybrid_rerank")
+_CANDIDATE_MULTIPLIER = 4
+_CANDIDATE_CAP = 50
+
 
 class RetrievalRepository(Protocol):
     def search_keyword(
@@ -106,6 +110,25 @@ def hybrid_merge(
 
     ranked = sorted(scores, key=lambda k: scores[k], reverse=True)[:limit]
     return [{**docs[source_id], "score": scores[source_id]} for source_id in ranked]
+
+
+def candidate_limit_for(limit: int) -> int:
+    return min(max(limit * _CANDIDATE_MULTIPLIER, limit), _CANDIDATE_CAP)
+
+
+def lexical_rerank(query: str, documents: list[dict], *, limit: int) -> list[dict]:
+    terms = [term.lower() for term in keyword_terms(query)]
+    scored: list[dict] = []
+    pool = max(len(documents), 1)
+    for rank, doc in enumerate(documents):
+        content = str(doc.get("content") or "").lower()
+        hits = sum(1 for term in terms if term in content)
+        overlap = hits / max(len(terms), 1)
+        prior = 1.0 - rank / pool
+        score = 0.7 * overlap + 0.3 * prior
+        scored.append({**doc, "score": score})
+    scored.sort(key=lambda row: row["score"], reverse=True)
+    return scored[:limit]
 
 
 def postgres_keyword_query(
@@ -274,4 +297,11 @@ class RetrievalService:
             embedding = self._embeddings.embed(query)
             dense = self._repo.search_dense(embedding, limit=limit, kind=kind)
             return hybrid_merge(keyword, dense, limit=limit)
+        if strategy == "hybrid_rerank":
+            pool = candidate_limit_for(limit)
+            keyword = self._repo.search_keyword(query, limit=pool, kind=kind)
+            embedding = self._embeddings.embed(query)
+            dense = self._repo.search_dense(embedding, limit=pool, kind=kind)
+            merged = hybrid_merge(keyword, dense, limit=pool)
+            return lexical_rerank(query, merged, limit=limit)
         raise ValueError(f"unknown strategy: {strategy}")
