@@ -29,7 +29,7 @@ from app.repository.receipts import ReceiptRepository
 from app.services.answering import AnsweringService
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
-from app.services.retrieval import RetrievalService
+from app.services.retrieval import SEARCH_STRATEGIES, RetrievalService
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -124,8 +124,10 @@ def search(
 ) -> list[dict]:
     if not q.strip():
         raise HTTPException(400, "query must not be empty")
-    if strategy not in {"keyword", "dense", "hybrid"}:
-        raise HTTPException(400, "strategy must be keyword, dense, or hybrid")
+    if strategy not in SEARCH_STRATEGIES:
+        raise HTTPException(
+            400, "strategy must be keyword, dense, hybrid, or hybrid_rerank"
+        )
     if limit < 1 or limit > 50:
         raise HTTPException(400, "limit must be between 1 and 50")
     return retrieval.search(q, strategy=strategy, limit=limit, kind=kind)
@@ -137,8 +139,10 @@ def ask(
     request: Request,
     answering: AnsweringService = Depends(get_answering_service),
 ) -> AnswerResponse:
-    if req.strategy not in {"keyword", "dense", "hybrid"}:
-        raise HTTPException(400, "strategy must be keyword, dense, or hybrid")
+    if req.strategy not in SEARCH_STRATEGIES:
+        raise HTTPException(
+            400, "strategy must be keyword, dense, hybrid, or hybrid_rerank"
+        )
     if req.limit < 1 or req.limit > 20:
         raise HTTPException(400, "limit must be between 1 and 20")
     return answering.answer(
