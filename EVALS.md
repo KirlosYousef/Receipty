@@ -245,3 +245,30 @@ new authoritative currency number.
 - Merchant is scored with normalized matching but is not part of combined `ok`. Extra store numbers and location words still fail that field.
 - Hallucination rates cover one gold-null receipt total and three gold-null receipt dates; more unreadable-field fixtures are needed before treating zero hallucinations as a durable claim.
 - The deterministic CI gate is intentionally small; it does not replace the live labelled baseline.
+
+## Retrieval questions and ablation
+
+Labelled questions live in `evals/retrieval_questions.jsonl` (40+). Each row has
+a question, gold `relevant_source_ids` on the receipt corpus built from
+`evals/labels.jsonl`, and an expected answer check (`expected_found`,
+`expected_answer_contains`).
+
+Metrics (implemented in `evals/retrieval_scoring.py`):
+
+| Metric | Meaning |
+|---|---|
+| `recall@k` | Fraction of gold source_ids that appear in the top-k hits. Queries with an empty gold set (not-found) are excluded. |
+| MRR | `1 / rank` of the first gold hit, else `0`. Same exclusion. |
+| Answer correctness | `found` matches the label; if found, the answer contains the expected snippet. |
+| Faithfulness | Every citation is a retrieved `source_id` (no invented IDs). |
+
+Ablation (hash embeddings in CI/tests; live embeddings optional):
+
+```bash
+python -m evals.retrieval_run --json reports/retrieval-ablation.json
+python -m evals.retrieval_run --live-embeddings --json reports/retrieval-live.json
+```
+
+Hash embeddings are not semantic. Use `--live-embeddings` before citing dense or
+hybrid numbers. Keyword and `hybrid_rerank` are meaningful with either provider
+because they use term overlap.

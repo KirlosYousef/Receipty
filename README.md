@@ -228,6 +228,7 @@ curl -s localhost:8000/v1/ingest/image \
 python -m evals.run
 # optional local report (gitignored)
 python -m evals.run --json reports/eval.json
+python -m evals.retrieval_run --json reports/retrieval-ablation.json
 ```
 
 The runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Per-file output covers receipt, total, date, merchant, and currency when labelled. Combined `ok` still requires only receipt, total, and date.

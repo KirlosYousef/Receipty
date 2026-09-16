@@ -72,6 +72,10 @@ _STOPWORDS = frozenset(
         "from",
         "with",
         "about",
+        "receipt",
+        "receipts",
+        "total",
+        "totals",
     }
 )
 
