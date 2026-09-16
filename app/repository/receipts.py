@@ -97,7 +97,13 @@ class SqliteReceiptRepository:
         return
 
 
-class PostgresReceiptRepository:
+class PostgresReceiptRepository:  # pragma: no cover
+    """Postgres-backed repository.
+
+    Excluded from CI coverage: it requires a live Postgres instance.
+    Run ``docker compose up`` and ``TEST_DATABASE_URL=... pytest`` to exercise it.
+    """
+
     def __init__(self, database_url: str):
         import psycopg
 
