@@ -55,6 +55,25 @@ def hybrid_merge(
     return [{**docs[source_id], "score": scores[source_id]} for source_id in ranked]
 
 
+def postgres_keyword_query(
+    query: str, *, limit: int, kind: str | None
+) -> tuple[str, list[Any]]:
+    sql = (
+        "SELECT id, kind, source_id, content, "
+        "ts_rank_cd(to_tsvector('english', content), "
+        "plainto_tsquery('english', %s)) AS score "
+        "FROM documents WHERE to_tsvector('english', content) "
+        "@@ plainto_tsquery('english', %s)"
+    )
+    params: list[Any] = [query, query]
+    if kind:
+        sql += " AND kind = %s"
+        params.append(kind)
+    sql += " ORDER BY score DESC LIMIT %s"
+    params.append(limit)
+    return sql, params
+
+
 class SqliteRetrievalRepository:
     def __init__(self, db_path: Any):
         import sqlite3
@@ -131,17 +150,7 @@ class PostgresRetrievalRepository:  # pragma: no cover
     def search_keyword(self, query: str, *, limit: int, kind: str | None) -> list[dict]:
         conn = self._connect()
         with conn.cursor() as cur:
-            sql = (
-                "SELECT id, kind, source_id, content, "
-                "ts_rank_cd(to_tsvector('english', content), plainto_tsquery('english', %s)) AS score "
-                "FROM documents WHERE to_tsvector('english', content) @@ plainto_tsquery('english', %s)"
-            )
-            params: list[Any] = [query]
-            if kind:
-                sql += " AND kind = %s"
-                params.append(kind)
-            sql += " ORDER BY score DESC LIMIT %s"
-            params.append(limit)
+            sql, params = postgres_keyword_query(query, limit=limit, kind=kind)
             cur.execute(sql, params)
             columns = [desc[0] for desc in cur.description]
             return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]

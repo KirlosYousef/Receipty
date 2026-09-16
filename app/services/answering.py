@@ -51,8 +51,15 @@ class AnsweringService:
         self._retrieval = retrieval
         self._prompt = prompt
 
-    def answer(self, question: str, *, request_id: str | None = None) -> AnswerResponse:
-        documents = self._retrieval.search(question, strategy="hybrid", limit=5)
+    def answer(
+        self,
+        question: str,
+        *,
+        strategy: str = "hybrid",
+        limit: int = 5,
+        request_id: str | None = None,
+    ) -> AnswerResponse:
+        documents = self._retrieval.search(question, strategy=strategy, limit=limit)
         if not documents:
             return NOT_FOUND_ANSWER
 

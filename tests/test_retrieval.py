@@ -13,6 +13,7 @@ from app.services.retrieval import (
     SqliteRetrievalRepository,
     cosine_similarity,
     hybrid_merge,
+    postgres_keyword_query,
 )
 
 
@@ -96,3 +97,16 @@ def test_hybrid_merge_deduplicates_and_reranks():
     source_ids = [row["source_id"] for row in merged]
     assert set(source_ids) == {"a", "b", "c"}
     assert source_ids[0] == "b"
+
+
+def test_postgres_keyword_query_binds_query_for_rank_and_match():
+    sql, params = postgres_keyword_query("Amazon", limit=5, kind=None)
+    assert sql.count("%s") == len(params)
+    assert params == ["Amazon", "Amazon", 5]
+
+
+def test_postgres_keyword_query_includes_kind_filter():
+    sql, params = postgres_keyword_query("Amazon", limit=3, kind="receipt")
+    assert sql.count("%s") == len(params)
+    assert params == ["Amazon", "Amazon", "receipt", 3]
+    assert "kind = %s" in sql

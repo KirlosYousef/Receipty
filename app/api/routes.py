@@ -141,7 +141,12 @@ def ask(
         raise HTTPException(400, "strategy must be keyword, dense, or hybrid")
     if req.limit < 1 or req.limit > 20:
         raise HTTPException(400, "limit must be between 1 and 20")
-    return answering.answer(req.question, request_id=request.state.request_id)
+    return answering.answer(
+        req.question,
+        strategy=req.strategy,
+        limit=req.limit,
+        request_id=request.state.request_id,
+    )
 
 
 @router.get("/v1/usage")
