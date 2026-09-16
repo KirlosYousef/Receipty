@@ -7,9 +7,28 @@ services:
     environment:
       DB_PATH: /app/data/receipts.db
       COST_LOG_PATH: /app/logs/cost.jsonl
+      DATABASE_URL: postgres://receipty:receipty@db:5432/receipty
     volumes:
       - receipty_data:/app/data
       - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: receipty
+      POSTGRES_PASSWORD: receipty
+      POSTGRES_DB: receipty
+    volumes:
+      - receipty_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U receipty"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   receipty_data:
+  receipty_pg:

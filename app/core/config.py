@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     seed: int | None = 42
 
     db_path: Path = Path("receipts.db")
+    database_url: str | None = None
     cost_log_path: Path = Path("logs/cost.jsonl")
     max_image_bytes: int = 8 * 1024 * 1024
     max_attempts: int = Field(default=3, ge=1)

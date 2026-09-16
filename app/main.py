@@ -12,7 +12,7 @@ from app.api.routes import router
 from app.core.config import Settings, get_settings
 from app.llm.provider import LLMProvider, OpenRouterProvider
 from app.observability.usage import UsageLogger
-from app.repository.receipts import ReceiptRepository
+from app.repository.receipts import build_repository
 from app.services.extraction import ExtractionService
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -30,7 +30,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        repo = ReceiptRepository(resolved_settings.db_path)
+        repo = build_repository(
+            db_path=resolved_settings.db_path,
+            database_url=resolved_settings.database_url,
+        )
         repo.init_db()
 
         provider = provider_factory(resolved_settings)
