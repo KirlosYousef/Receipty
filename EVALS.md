@@ -57,6 +57,34 @@ predictions changed. It rejects incompatible configurations or fixture sets
 rather than silently combining them. Commit SHA may differ: a comparison can
 intentionally measure the impact of a code change.
 
+A prediction is “changed” when any of `pred_outcome`, `pred_merchant`,
+`pred_total`, `pred_currency`, `pred_date`, or `pred_tax` differs between
+runs (`evals/compare.py` `_prediction_signature`). Latency, tokens, and cost
+are reported separately and do not count as prediction changes.
+
+### Repeat-run 2026-09-17 (v1 / v1)
+
+Local reports: `reports/baseline-2026-09-17.json` and
+`reports/baseline-2026-09-17-b.json` (gitignored). Comparison:
+`reports/variance.json`.
+
+| Item | Value |
+|---|---|
+| Commit | `60133b838f720e97e1b0e2eb17666f6f08b7244b` |
+| Model / temperature / seed | `google/gemini-3.1-flash-lite` / `0.0` / `42` |
+| Prompt | `extraction-v1` (`0248b009…530bb6101b`) |
+| Labels / fixtures | `evals/labels.jsonl` / `evals/fixtures` |
+| Compared fields | `pred_outcome`, `pred_merchant`, `pred_total`, `pred_currency`, `pred_date`, `pred_tax` |
+| Prediction changes | **0/60** |
+| Combined `ok` / receipt / total / date | 60/60 each, both runs |
+| Merchant / currency (scored) | 51/55 and 30/31, both runs |
+| Hallucinated total / date | 0/1 and 0/3, both runs |
+| Tokens / cost | 98,978 / `$0.029837`, both runs |
+| Mean latency | 2,046ms then 1,744ms (route variance; not a prediction change) |
+
+This is a same-configuration live-model repeat, not a prompt experiment. The
+v1/v2 12-file delta below is a different comparison.
+
 ## Prompt and model experiments
 
 The runner selects a versioned prompt, records its version and SHA-256 hash,
