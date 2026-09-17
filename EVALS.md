@@ -248,10 +248,13 @@ new authoritative currency number.
 
 ## Retrieval questions and ablation
 
-Labelled questions live in `evals/retrieval_questions.jsonl` (40+). Each row has
-a question, gold `relevant_source_ids` on the receipt corpus built from
-`evals/labels.jsonl`, and an expected answer check (`expected_found`,
-`expected_answer_contains`).
+Labelled questions live in `evals/retrieval_questions.jsonl` (**69** rows: 64
+expected-found, 5 not-found). Each row has a question, gold
+`relevant_source_ids` on the receipt corpus built from `evals/labels.jsonl`,
+and an expected answer check (`expected_found`, `expected_answer_contains`).
+
+Production `POST /v1/ask` does not reject citations outside the retrieved set.
+Faithfulness below is an eval metric, not an API guarantee.
 
 Metrics (implemented in `evals/retrieval_scoring.py`):
 
