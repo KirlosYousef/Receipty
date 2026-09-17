@@ -77,7 +77,7 @@ function formatMoney(n) {
 
 function classify(row) {
   if (!row.is_receipt) return "reject";
-  if (row.outcome) return "outcome";
+  if (row.outcome === "needs_review") return "review";
   return "receipt";
 }
 
@@ -126,7 +126,7 @@ function renderBoard() {
 function updateAnalytics() {
   const total = state.items.length;
   const receipts = state.items.filter((r) => r.is_receipt).length;
-  const review = state.items.filter((r) => r.outcome).length;
+  const review = state.items.filter((r) => r.outcome === "needs_review").length;
   let spend = 0;
   const byCurrency = {};
 
