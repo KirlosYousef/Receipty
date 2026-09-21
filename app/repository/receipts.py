@@ -17,6 +17,18 @@ class ReceiptRepository(Protocol):
 
     def list_all(self) -> list[dict]: ...
 
+    def get(self, receipt_id: int) -> dict | None: ...
+
+    def update_outcome(self, receipt_id: int, outcome: str) -> dict: ...
+
+    def set_used(self, receipt_id: int, used: bool) -> dict: ...
+
+    def ledger_sum_total(self, merchant: str | None = None) -> dict: ...
+
+    def ledger_count(self, merchant: str | None = None) -> dict: ...
+
+    def ledger_totals_by_merchant(self) -> list[dict]: ...
+
     def save_document(
         self, kind: str, source_id: str, content: str, embedding: list[float]
     ) -> int: ...
@@ -68,6 +80,13 @@ class SqliteReceiptRepository:
                 )
                 """
             )
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(receipts)").fetchall()
+            }
+            if "used" not in columns:
+                conn.execute(
+                    "ALTER TABLE receipts ADD COLUMN used INTEGER NOT NULL DEFAULT 0"
+                )
             conn.commit()
         finally:
             conn.close()
@@ -108,6 +127,83 @@ class SqliteReceiptRepository:
         try:
             rows = conn.execute("SELECT * FROM receipts ORDER BY id DESC").fetchall()
             return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def get(self, receipt_id: int) -> dict | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM receipts WHERE id = ?", (receipt_id,)
+            ).fetchone()
+            return dict(row) if row is not None else None
+        finally:
+            conn.close()
+
+    def update_outcome(self, receipt_id: int, outcome: str) -> dict:
+        return self._update(
+            receipt_id,
+            "UPDATE receipts SET outcome = ? WHERE id = ?",
+            (outcome, receipt_id),
+        )
+
+    def set_used(self, receipt_id: int, used: bool) -> dict:
+        return self._update(
+            receipt_id,
+            "UPDATE receipts SET used = ? WHERE id = ?",
+            (int(used), receipt_id),
+        )
+
+    def _update(self, receipt_id: int, sql: str, params: tuple) -> dict:
+        conn = self._connect()
+        try:
+            conn.execute(sql, params)
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM receipts WHERE id = ?", (receipt_id,)
+            ).fetchone()
+            if row is None:
+                raise LookupError(f"receipt {receipt_id} not found")
+            return dict(row)
+        finally:
+            conn.close()
+
+    def ledger_sum_total(self, merchant: str | None = None) -> dict:
+        sql = (
+            "SELECT COALESCE(SUM(CAST(total AS REAL)), 0) AS amount, COUNT(*) AS n "
+            "FROM receipts WHERE is_receipt = 1 AND total IS NOT NULL"
+        )
+        params: list[Any] = []
+        if merchant:
+            sql += " AND LOWER(merchant) = LOWER(?)"
+            params.append(merchant)
+        return self._ledger_one(sql, params)
+
+    def ledger_count(self, merchant: str | None = None) -> dict:
+        sql = "SELECT COUNT(*) AS n FROM receipts WHERE is_receipt = 1"
+        params: list[Any] = []
+        if merchant:
+            sql += " AND LOWER(merchant) = LOWER(?)"
+            params.append(merchant)
+        return self._ledger_one(sql, params)
+
+    def ledger_totals_by_merchant(self) -> list[dict]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT merchant, COALESCE(SUM(CAST(total AS REAL)), 0) AS amount, "
+                "COUNT(*) AS n FROM receipts WHERE is_receipt = 1 AND merchant IS NOT NULL "
+                "GROUP BY merchant ORDER BY amount DESC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def _ledger_one(self, sql: str, params: list[Any]) -> dict:
+        conn = self._connect()
+        try:
+            row = conn.execute(sql, params).fetchone()
+            return dict(row) if row is not None else {}
         finally:
             conn.close()
 
@@ -204,6 +300,10 @@ class PostgresReceiptRepository:  # pragma: no cover
                 ON documents USING hnsw (embedding vector_cosine_ops)
                 """
             )
+            cur.execute(
+                "ALTER TABLE receipts ADD COLUMN IF NOT EXISTS used "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            )
 
     def save(self, row: ReceiptExtract) -> int:
         conn = self._connect()
@@ -234,11 +334,90 @@ class PostgresReceiptRepository:  # pragma: no cover
         conn = self._connect()
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, is_receipt, merchant, total, currency, date, tax, outcome "
+                "SELECT id, is_receipt, merchant, total, currency, date, tax, outcome, used "
                 "FROM receipts ORDER BY id DESC"
             )
             columns = [desc[0] for desc in cur.description]
             return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]
+
+    def get(self, receipt_id: int) -> dict | None:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, is_receipt, merchant, total, currency, date, tax, outcome, used "
+                "FROM receipts WHERE id = %s",
+                (receipt_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+            columns = [desc[0] for desc in cur.description]
+            return dict(zip(columns, row, strict=True))
+
+    def update_outcome(self, receipt_id: int, outcome: str) -> dict:
+        return self._update(
+            receipt_id,
+            "UPDATE receipts SET outcome = %s WHERE id = %s",
+            (outcome, receipt_id),
+        )
+
+    def set_used(self, receipt_id: int, used: bool) -> dict:
+        return self._update(
+            receipt_id,
+            "UPDATE receipts SET used = %s WHERE id = %s",
+            (used, receipt_id),
+        )
+
+    def _update(self, receipt_id: int, sql: str, params: tuple) -> dict:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            if cur.rowcount == 0:
+                raise LookupError(f"receipt {receipt_id} not found")
+        row = self.get(receipt_id)
+        if row is None:
+            raise LookupError(f"receipt {receipt_id} not found")
+        return row
+
+    def ledger_sum_total(self, merchant: str | None = None) -> dict:
+        sql = (
+            "SELECT COALESCE(SUM(CAST(total AS DOUBLE PRECISION)), 0) AS amount, "
+            "COUNT(*) AS n FROM receipts WHERE is_receipt = TRUE AND total IS NOT NULL"
+        )
+        params: list[Any] = []
+        if merchant:
+            sql += " AND LOWER(merchant) = LOWER(%s)"
+            params.append(merchant)
+        return self._ledger_one(sql, params)
+
+    def ledger_count(self, merchant: str | None = None) -> dict:
+        sql = "SELECT COUNT(*) AS n FROM receipts WHERE is_receipt = TRUE"
+        params: list[Any] = []
+        if merchant:
+            sql += " AND LOWER(merchant) = LOWER(%s)"
+            params.append(merchant)
+        return self._ledger_one(sql, params)
+
+    def ledger_totals_by_merchant(self) -> list[dict]:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT merchant, COALESCE(SUM(CAST(total AS DOUBLE PRECISION)), 0) AS amount, "
+                "COUNT(*) AS n FROM receipts WHERE is_receipt = TRUE AND merchant IS NOT NULL "
+                "GROUP BY merchant ORDER BY amount DESC"
+            )
+            columns = [desc[0] for desc in cur.description]
+            return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]
+
+    def _ledger_one(self, sql: str, params: list[Any]) -> dict:
+        conn = self._connect()
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            if row is None:
+                return {}
+            columns = [desc[0] for desc in cur.description]
+            return dict(zip(columns, row, strict=True))
 
     def close(self) -> None:
         if self._conn is not None:
