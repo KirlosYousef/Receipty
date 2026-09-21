@@ -22,6 +22,7 @@ from app.core.exceptions import (
 from app.domain.schemas import (
     AgentRequest,
     AgentResponse,
+    AgentResumeRequest,
     AnswerResponse,
     AskRequest,
     IngestResponse,
@@ -29,7 +30,7 @@ from app.domain.schemas import (
     ReceiptExtract,
 )
 from app.repository.receipts import ReceiptRepository
-from app.services.agent import AgentService
+from app.services.agent import AgentNotPaused, AgentService
 from app.services.answering import AnsweringService
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
@@ -168,6 +169,26 @@ def agent(
             req.question,
             request_id=request.state.request_id,
         )
+    except ProviderError as e:
+        raise _map_provider_error(e) from e
+
+
+@router.post("/v1/agent/resume", response_model=AgentResponse)
+def agent_resume(
+    req: AgentResumeRequest,
+    request: Request,
+    agent_service: AgentService = Depends(get_agent_service),
+) -> AgentResponse:
+    try:
+        return agent_service.resume(
+            req.thread_id,
+            approved=req.approved,
+            request_id=request.state.request_id,
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except AgentNotPaused as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ProviderError as e:
         raise _map_provider_error(e) from e
 

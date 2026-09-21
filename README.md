@@ -6,7 +6,7 @@ Receipty is a production-minded FastAPI service: OpenRouter chat completions wit
 
 | Stack | |
 | --- | --- |
-| Runtime | Python 3.12, FastAPI, Uvicorn, Pydantic v2 |
+| Runtime | Python 3.12, FastAPI, Uvicorn, Pydantic v2, LangGraph |
 | Models | OpenAI SDK → [OpenRouter](https://openrouter.ai): chat `google/gemini-3.1-flash-lite`, embeddings `openai/text-embedding-3-small` |
 | Data | SQLite by default; Postgres + pgvector when `DATABASE_URL` is set. JSONL cost log. |
 | UI | Static scan-deck dashboard (multi-upload, review board, usage pulse) |
@@ -39,7 +39,7 @@ Aimed at AI / applied-ML engineering work: shipping extraction and retrieval sys
 | **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Unique text hints or copied symbols map to ISO currency. Negative totals need review. |
 | **Hybrid retrieval** | Keyword, dense (cosine / pgvector), hybrid merge, and hybrid + lexical rerank over receipt docs, merchant aliases, and policy notes. |
 | **Grounded answering** | `POST /v1/ask` retrieves receipt context, then a strict `AnswerResponse` schema (`answer`, `citations`, `found`). Citation *faithfulness* is scored in evals, not enforced at request time. |
-| **Bounded agent** | `POST /v1/agent` offers four application-owned tools. Reads (`search_receipts`, `query_ledger`) run immediately. Writes (`flag_for_review`, `mark_used`) return `needs_approval` without mutating. `MAX_AGENT_STEPS` (default 8) stops a tool loop. |
+| **Bounded agent** | `POST /v1/agent` is a LangGraph tool loop over four application-owned tools. Reads run immediately. Writes call `interrupt()` and wait for `POST /v1/agent/resume`. `MAX_AGENT_STEPS` (default 8) stops a tool loop. The in-memory checkpointer is process-local. |
 | **Evaluation** | 60 labeled extraction fixtures and 69 retrieval questions. Extraction scoring runs the production `ExtractionService`. Retrieval ablation runs the production search/ask path. See [EVALS.md](EVALS.md). |
 | **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default. Prompt versions (`extraction-v1` production; `extraction-v2-evidence` experiment) are hashed in eval reports. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
@@ -83,9 +83,9 @@ Dashboard / curl
         │                retrieve receipts → context → JSON answer
         │                empty hits / bad JSON → found=false
         │
-        └─ /v1/agent ──► AgentService
+        └─ /v1/agent ──► AgentService (LangGraph + InMemorySaver)
                          model ↔ allowlisted tools, max N rounds
-                         reads run; writes return needs_approval
+                         reads run; writes interrupt until /v1/agent/resume
 ```
 
 ```
@@ -154,7 +154,9 @@ Optional `kind` filter: `receipt` \| `merchant_alias` \| `policy_note`.
 
 `POST /v1/ask` always searches `kind=receipt`, builds a `[source_id: …]` context block, and asks the chat model for a strict `AnswerResponse`. No hits, invalid JSON, or provider failure return the fixed not-found message with `found=false` and empty citations. The API does **not** currently reject citations that were not in the retrieved set; `evals/retrieval_scoring.py` measures that faithfulness separately.
 
-`POST /v1/agent` is a bounded tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` are advertised to the model but **not executed**; the response stops with `stopped_reason=needs_approval` and the proposed args. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools. This is not a streaming endpoint.
+`POST /v1/agent` is a LangGraph tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` pause the graph with `interrupt()`; the response includes a `thread_id` and `stopped_reason=needs_approval`. `POST /v1/agent/resume` with `{thread_id, approved}` either runs the write or returns a tool error, then continues the loop. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools.
+
+The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart. This is not a streaming endpoint.
 
 Search, ask, and agent are API-only; the dashboard does not expose them yet.
 
@@ -205,7 +207,8 @@ Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost l
 | GET | `/v1/receipts` | Ledger (newest first) |
 | GET | `/v1/search` | Query `?q=...&strategy=keyword\|dense\|hybrid\|hybrid_rerank&limit=5&kind=receipt\|merchant_alias\|policy_note` |
 | POST | `/v1/ask` | JSON `{"question": "...", "strategy": "hybrid", "limit": 5}` → `{answer, citations, found}` |
-| POST | `/v1/agent` | JSON `{"question": "..."}` → `{answer, stopped_reason, steps, pending_mutation}` |
+| POST | `/v1/agent` | JSON `{"question": "..."}` → `{answer, stopped_reason, steps, pending_mutation, thread_id}` |
+| POST | `/v1/agent/resume` | JSON `{"thread_id": "...", "approved": true}` → same shape; 404 unknown thread, 409 if not paused |
 | GET | `/v1/usage` | Aggregated cost / tokens (last 50 call rows) |
 
 Interactive OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs).
@@ -253,6 +256,9 @@ curl -s localhost:8000/v1/ask \
 curl -s localhost:8000/v1/agent \
   -H 'content-type: application/json' \
   -d '{"question":"How much did I spend at Taco Bell?"}'
+curl -s localhost:8000/v1/agent/resume \
+  -H 'content-type: application/json' \
+  -d '{"thread_id":"THREAD_ID","approved":true}'
 ```
 
 ### Provider errors
@@ -266,6 +272,8 @@ curl -s localhost:8000/v1/agent \
 | Unsupported MIME | 400 |
 | Image larger than `MAX_IMAGE_BYTES` | 413 |
 | Empty search query / bad strategy or limit | 400 |
+| Unknown agent thread | 404 |
+| Resume when the agent is not waiting | 409 |
 
 ## Evaluation
 
