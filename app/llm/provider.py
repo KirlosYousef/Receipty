@@ -32,6 +32,7 @@ class LLMProvider(Protocol):
         *,
         request_id: str | None = None,
         response_format: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> Any: ...
 
     def close(self) -> None: ...
@@ -66,6 +67,7 @@ class OpenRouterProvider:
         *,
         request_id: str | None = None,
         response_format: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> Any:
         started_at = self._clock()
         last: BaseException | None = None
@@ -95,7 +97,12 @@ class OpenRouterProvider:
                     },
                     "timeout": attempt_timeout,
                 }
-                if response_format is None:
+                if tools is not None:
+                    kwargs["tools"] = tools
+                    kwargs["tool_choice"] = "auto"
+                    if response_format:
+                        kwargs["response_format"] = response_format
+                elif response_format is None:
                     kwargs["response_format"] = {
                         "type": "json_schema",
                         "json_schema": {

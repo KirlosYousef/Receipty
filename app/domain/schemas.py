@@ -3,6 +3,7 @@ from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -136,3 +137,21 @@ class AnswerResponse(BaseModel):
     answer: str
     citations: list[str]
     found: bool
+
+
+class AgentRequest(BaseModel):
+    question: str = Field(min_length=1)
+
+
+class AgentStep(BaseModel):
+    tool: str
+    args: dict[str, Any]
+    result: Any | None = None
+    status: Literal["ok", "error", "needs_approval"]
+
+
+class AgentResponse(BaseModel):
+    answer: str
+    stopped_reason: Literal["completed", "max_steps", "needs_approval"]
+    steps: list[AgentStep]
+    pending_mutation: dict[str, Any] | None = None
