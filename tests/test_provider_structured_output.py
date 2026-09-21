@@ -38,3 +38,16 @@ def test_provider_requests_strict_receipt_schema():
         response_format["json_schema"]["schema"] == ReceiptLLMOutput.model_json_schema()
     )
     assert completions.kwargs["extra_body"]["provider"]["require_parameters"] is True
+
+
+def test_provider_skips_extraction_schema_when_tools_are_set():
+    completions = CapturingCompletions()
+    provider = OpenRouterProvider(settings=Settings(openrouter_api_key="test-key"))
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    tools = [{"type": "function", "function": {"name": "search_receipts"}}]
+
+    provider.complete([{"role": "user", "content": "How much?"}], tools=tools)
+
+    assert completions.kwargs["tools"] == tools
+    assert completions.kwargs["tool_choice"] == "auto"
+    assert "response_format" not in completions.kwargs

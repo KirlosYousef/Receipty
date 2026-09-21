@@ -5,6 +5,7 @@ from fastapi import Request
 from app.core.config import get_settings
 from app.observability.usage import UsageLogger
 from app.repository.receipts import ReceiptRepository
+from app.services.agent import AgentService
 from app.services.answering import AnsweringService
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
@@ -17,6 +18,7 @@ __all__ = [
     "get_indexer",
     "get_retrieval_service",
     "get_answering_service",
+    "get_agent_service",
 ]
 
 
@@ -45,3 +47,7 @@ def get_retrieval_service(request: Request) -> RetrievalService:
 
 def get_answering_service(request: Request) -> AnsweringService:
     return request.app.state.answering_service
+
+
+def get_agent_service(request: Request) -> AgentService:
+    return request.app.state.agent_service

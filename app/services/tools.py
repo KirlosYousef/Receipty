@@ -10,6 +10,9 @@ from app.services.retrieval import RetrievalService
 
 LEDGER_QUERY_IDS = ("sum_total", "count", "totals_by_merchant")
 LedgerQueryId = Literal["sum_total", "count", "totals_by_merchant"]
+READ_TOOLS = frozenset({"search_receipts", "query_ledger"})
+WRITE_TOOLS = frozenset({"flag_for_review", "mark_used"})
+KNOWN_TOOLS = READ_TOOLS | WRITE_TOOLS
 
 
 class ToolError(ValueError):
@@ -34,6 +37,61 @@ class ReceiptIdArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     receipt_id: int = Field(ge=1)
+
+
+def _parameters(model: type[BaseModel]) -> dict[str, Any]:
+    schema = model.model_json_schema()
+    schema.pop("title", None)
+    return schema
+
+
+TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_receipts",
+            "description": (
+                "Search indexed receipts by merchant, date, or free text. "
+                "Returns ranked snippets with source_id."
+            ),
+            "parameters": _parameters(SearchReceiptsArgs),
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_ledger",
+            "description": (
+                "Run a named ledger aggregate. query_id must be sum_total, "
+                "count, or totals_by_merchant. Optional merchant filter. "
+                "Does not accept SQL."
+            ),
+            "parameters": _parameters(QueryLedgerArgs),
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "flag_for_review",
+            "description": (
+                "Propose setting a receipt outcome to needs_review. "
+                "This write needs approval and will not run immediately."
+            ),
+            "parameters": _parameters(ReceiptIdArgs),
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mark_used",
+            "description": (
+                "Propose marking a receipt as used. "
+                "This write needs approval and will not run immediately."
+            ),
+            "parameters": _parameters(ReceiptIdArgs),
+        },
+    },
+]
 
 
 def parse_args(model: type[BaseModel], raw: dict[str, Any]) -> BaseModel:
@@ -83,3 +141,8 @@ class AgentTools:
         except LookupError as exc:
             raise ToolError(str(exc)) from exc
         return row
+
+    def dispatch(self, name: str, raw: dict[str, Any]) -> Any:
+        if name not in KNOWN_TOOLS:
+            raise ToolError(f"unknown tool: {name}")
+        return getattr(self, name)(raw)

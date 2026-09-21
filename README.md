@@ -21,7 +21,8 @@ Expense and “OCR” products fail quietly when a model hallucinates a total. C
 3. Parse money and dates with **deterministic rules** that refuse ambiguous tokens.
 4. Emit an **outcome** (`success` / `needs_review` / `not_receipt` / `extraction_failed`) so downstream software can route, not guess.
 5. Index successful extracts and answer questions only from retrieved context, with citations — or say not found.
-6. Measure both pipelines on labeled sets — and document what those scores do *not* prove.
+6. For multi-step ledger questions, let the model call allowlisted tools. Reads run; writes pause for approval. Cap the number of rounds.
+7. Measure both pipelines on labeled sets — and document what those scores do *not* prove.
 
 That combination — constrained generation, fail-closed validation, human-in-the-loop outcomes, grounded retrieval, and honest evaluation — is the core of the project.
 
@@ -38,6 +39,7 @@ Aimed at AI / applied-ML engineering work: shipping extraction and retrieval sys
 | **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Unique text hints or copied symbols map to ISO currency. Negative totals need review. |
 | **Hybrid retrieval** | Keyword, dense (cosine / pgvector), hybrid merge, and hybrid + lexical rerank over receipt docs, merchant aliases, and policy notes. |
 | **Grounded answering** | `POST /v1/ask` retrieves receipt context, then a strict `AnswerResponse` schema (`answer`, `citations`, `found`). Citation *faithfulness* is scored in evals, not enforced at request time. |
+| **Bounded agent** | `POST /v1/agent` offers four application-owned tools. Reads (`search_receipts`, `query_ledger`) run immediately. Writes (`flag_for_review`, `mark_used`) return `needs_approval` without mutating. `MAX_AGENT_STEPS` (default 8) stops a tool loop. |
 | **Evaluation** | 60 labeled extraction fixtures and 69 retrieval questions. Extraction scoring runs the production `ExtractionService`. Retrieval ablation runs the production search/ask path. See [EVALS.md](EVALS.md). |
 | **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default. Prompt versions (`extraction-v1` production; `extraction-v2-evidence` experiment) are hashed in eval reports. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
@@ -77,9 +79,13 @@ Dashboard / curl
         ├─ /v1/search ──► RetrievalService
         │                   keyword | dense | hybrid | hybrid_rerank
         │
-        └─ /v1/ask ──► AnsweringService
-                         retrieve receipts → context → JSON answer
-                         empty hits / bad JSON → found=false
+        ├─ /v1/ask ──► AnsweringService
+        │                retrieve receipts → context → JSON answer
+        │                empty hits / bad JSON → found=false
+        │
+        └─ /v1/agent ──► AgentService
+                         model ↔ allowlisted tools, max N rounds
+                         reads run; writes return needs_approval
 ```
 
 ```
@@ -88,7 +94,7 @@ app/
   core/           settings, typed provider exceptions
   domain/         Outcome, ReceiptLLMOutput, ReceiptExtract, Ask/Answer schemas
   llm/            OpenRouter chat + embeddings + versioned prompts
-  services/       extraction, postprocess, indexing, retrieval, answering
+  services/       extraction, postprocess, indexing, retrieval, answering, tools, agent
   repository/     SQLite or Postgres+pgvector ledger and document store
   seed/           merchant aliases + policy notes
   observability/  per-call cost JSONL
@@ -148,7 +154,9 @@ Optional `kind` filter: `receipt` \| `merchant_alias` \| `policy_note`.
 
 `POST /v1/ask` always searches `kind=receipt`, builds a `[source_id: …]` context block, and asks the chat model for a strict `AnswerResponse`. No hits, invalid JSON, or provider failure return the fixed not-found message with `found=false` and empty citations. The API does **not** currently reject citations that were not in the retrieved set; `evals/retrieval_scoring.py` measures that faithfulness separately.
 
-Search and ask are API-only; the dashboard does not expose them yet.
+`POST /v1/agent` is a bounded tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` are advertised to the model but **not executed**; the response stops with `stopped_reason=needs_approval` and the proposed args. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools. This is not a streaming endpoint.
+
+Search, ask, and agent are API-only; the dashboard does not expose them yet.
 
 ## Dashboard
 
@@ -197,6 +205,7 @@ Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost l
 | GET | `/v1/receipts` | Ledger (newest first) |
 | GET | `/v1/search` | Query `?q=...&strategy=keyword\|dense\|hybrid\|hybrid_rerank&limit=5&kind=receipt\|merchant_alias\|policy_note` |
 | POST | `/v1/ask` | JSON `{"question": "...", "strategy": "hybrid", "limit": 5}` → `{answer, citations, found}` |
+| POST | `/v1/agent` | JSON `{"question": "..."}` → `{answer, stopped_reason, steps, pending_mutation}` |
 | GET | `/v1/usage` | Aggregated cost / tokens (last 50 call rows) |
 
 Interactive OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs).
@@ -241,6 +250,9 @@ curl -s 'localhost:8000/v1/search?q=Carrefour&strategy=hybrid&limit=5'
 curl -s localhost:8000/v1/ask \
   -H 'content-type: application/json' \
   -d '{"question":"What did I spend at Carrefour?","strategy":"hybrid","limit":5}'
+curl -s localhost:8000/v1/agent \
+  -H 'content-type: application/json' \
+  -d '{"question":"How much did I spend at Taco Bell?"}'
 ```
 
 ### Provider errors

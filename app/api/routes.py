@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.api.deps import (
+    get_agent_service,
     get_answering_service,
     get_extraction_service,
     get_indexer,
@@ -19,6 +20,8 @@ from app.core.exceptions import (
     ProviderError,
 )
 from app.domain.schemas import (
+    AgentRequest,
+    AgentResponse,
     AnswerResponse,
     AskRequest,
     IngestResponse,
@@ -26,6 +29,7 @@ from app.domain.schemas import (
     ReceiptExtract,
 )
 from app.repository.receipts import ReceiptRepository
+from app.services.agent import AgentService
 from app.services.answering import AnsweringService
 from app.services.extraction import ExtractionService
 from app.services.indexing import IndexingService
@@ -151,6 +155,21 @@ def ask(
         limit=req.limit,
         request_id=request.state.request_id,
     )
+
+
+@router.post("/v1/agent", response_model=AgentResponse)
+def agent(
+    req: AgentRequest,
+    request: Request,
+    agent_service: AgentService = Depends(get_agent_service),
+) -> AgentResponse:
+    try:
+        return agent_service.run(
+            req.question,
+            request_id=request.state.request_id,
+        )
+    except ProviderError as e:
+        raise _map_provider_error(e) from e
 
 
 @router.get("/v1/usage")
