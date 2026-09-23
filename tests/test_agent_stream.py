@@ -86,11 +86,7 @@ def test_agent_stream_http_and_provider_error(tmp_path):
     )
     with TestClient(app) as client:
         provider._completions = [
-            _completion(
-                tool_calls=[
-                    _tool_call("query_ledger", {"query_id": "count"})
-                ]
-            ),
+            _completion(tool_calls=[_tool_call("query_ledger", {"query_id": "count"})]),
             _completion(content="There are 0 receipts."),
         ]
         with client.stream(
@@ -111,6 +107,4 @@ def test_agent_stream_http_and_provider_error(tmp_path):
             "POST", "/v1/agent/stream", json={"question": "How many receipts?"}
         ) as response:
             error_events = _parse_sse("".join(response.iter_text()))
-        assert error_events == [
-            ("error", {"status": 502, "detail": "upstream down"})
-        ]
+        assert error_events == [("error", {"status": 502, "detail": "upstream down"})]
