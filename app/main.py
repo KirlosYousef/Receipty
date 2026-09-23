@@ -31,6 +31,17 @@ STATIC_DIR = Path(__file__).parent / "static"
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 ProviderFactory = Callable[[Settings], LLMProvider]
+
+
+def _escalation_provider(
+    settings: Settings, spans: SpanRecorder
+) -> OpenRouterProvider | None:
+    model = settings.escalation_model.strip()
+    if not model or model == settings.model:
+        return None
+    return OpenRouterProvider(settings.model_copy(update={"model": model}), spans=spans)
+
+
 EmbeddingFactory = Callable[[Settings], EmbeddingProvider]
 
 
@@ -53,8 +64,10 @@ def create_app(
         spans = SpanRecorder(resolved_settings.trace_log_path)
         if provider_factory is OpenRouterProvider:
             provider = OpenRouterProvider(resolved_settings, spans=spans)
+            escalation = _escalation_provider(resolved_settings, spans)
         else:
             provider = provider_factory(resolved_settings)
+            escalation = None
         if embedding_factory is OpenRouterEmbeddings:
             embeddings = OpenRouterEmbeddings(resolved_settings, spans=spans)
         else:
@@ -64,7 +77,7 @@ def create_app(
             max_entries=resolved_settings.embedding_cache_size,
         )
         usage = UsageLogger(resolved_settings.cost_log_path)
-        service = ExtractionService(provider, usage)
+        service = ExtractionService(provider, usage, escalation=escalation)
         indexer = IndexingService(repo, embeddings)
         indexer.seed_static_documents()
         indexer.index_existing_receipts()
@@ -93,6 +106,8 @@ def create_app(
             yield
         finally:
             provider.close()
+            if escalation is not None:
+                escalation.close()
 
     app = FastAPI(title="Receipty", lifespan=lifespan)
     limiter = RateLimiter(

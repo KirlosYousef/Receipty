@@ -139,6 +139,8 @@ plus OpenRouter `provider.require_parameters: true`. `POST /v1/ask` sends the `A
 
 **Fail closed** (`app/services/extraction.py`): missing message content or `ValidationError` becomes `is_receipt=false`, `outcome=extraction_failed`. Markdown fences are stripped as a defensive fallback; they are not a license to invent fields.
 
+**Escalation:** `MODEL` handles every extraction. When `ESCALATION_MODEL` is set to a different model, a result of `needs_review` or `extraction_failed` is sent once to that model. `success` and `not_receipt` stay on `MODEL`. The second call is logged as `text_escalation` or `image_escalation`. An empty `ESCALATION_MODEL` makes one call.
+
 **Post-rules** (`app/services/postprocess.py` + `ReceiptExtract._resolve_outcome`):
 
 - Not a receipt → clear merchant, total, currency, date, tax; outcome `not_receipt` (unless already `extraction_failed`).
@@ -362,6 +364,7 @@ Covered behavior includes:
 | `OPENROUTER_API_KEY` | (required for live calls) |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `MODEL` | `google/gemini-3.1-flash-lite` |
+| `ESCALATION_MODEL` | empty (one model). A different model receives one retry after `needs_review` or `extraction_failed` |
 | `EMBEDDING_MODEL` | `openai/text-embedding-3-small` |
 | `EMBEDDING_CACHE_SIZE` | `256` (set `0` to call the embedding provider every time) |
 | `TEMPERATURE` | `0.0` |
