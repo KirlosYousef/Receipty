@@ -1,0 +1,20 @@
+---
+description: Keep README.md accurate after every project change
+alwaysApply: true
+---
+
+# README stays current
+
+After every code, API, config, or behavior change, check `README.md` before finishing.
+
+Update it in the same change when any of these are now wrong or missing:
+
+- What the service does
+- Endpoints, request or response shape, status codes
+- Setup, env vars, or commands
+- Architecture or file layout
+- Behavior a reader would rely on (tools, writes, streaming, storage)
+
+Leave `README.md` unchanged only when the change does not affect those facts. Do not add a changelog entry for a refactor that keeps the same behavior.
+
+Example: adding `POST /v1/agent/stream` requires the API table, a curl example, and the architecture note in the same change.
