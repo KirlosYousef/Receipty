@@ -86,6 +86,7 @@ Dashboard / curl
         └─ /v1/agent ──► AgentService (LangGraph + InMemorySaver)
                          model ↔ allowlisted tools, max N rounds
                          reads run; writes interrupt until /v1/agent/resume
+                         time budget or provider failure → stopped_reason=fallback
            /v1/agent/stream ──► the same run
                          SSE: step events, then done
 
@@ -164,7 +165,7 @@ Optional `kind` filter: `receipt` \| `merchant_alias` \| `policy_note`.
 
 The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart.
 
-`POST /v1/agent/stream` is the same run as server-sent events. Each finished tool call is a `step` event. The last event is `done`, with the same body as `POST /v1/agent`, including `thread_id` when a write is waiting. A provider failure emits an `error` event. The model’s tokens are not streamed one by one.
+`POST /v1/agent/stream` is the same run as server-sent events. Each finished tool call is a `step` event. The last event is `done`, with the same body as `POST /v1/agent`, including `thread_id` when a write is waiting and `stopped_reason=fallback` when the provider fails or the time budget is spent. The model’s tokens are not streamed one by one.
 
 `python -m app.mcp_server` is a second doorbell for the same `AgentTools` class, over MCP stdio. `query_ledger` still only accepts `sum_total`, `count`, and `totals_by_merchant`. Calling `mark_used` or `flag_for_review` from an MCP client runs the write. `POST /v1/agent` still pauses those writes, because the caller there is the model.
 
@@ -291,7 +292,7 @@ curl -s localhost:8000/v1/agent/resume \
 | Unknown agent thread | 404 |
 | Resume when the agent is not waiting | 409 |
 
-`POST /v1/agent/stream` uses the same provider failures. The HTTP status stays 200 and the stream emits `event: error` with `status` and `detail`.
+A provider failure inside `POST /v1/agent` or `POST /v1/agent/stream` is a finished run: HTTP 200, `stopped_reason=fallback`, and any tool steps already completed. Extraction, search, and ask still use the table above.
 
 ## Evaluation
 
@@ -304,6 +305,7 @@ python -m evals.compare reports/run-a.json reports/run-b.json
 python -m evals.retrieval_run --json reports/retrieval-ablation.json
 python -m evals.retrieval_run --live-embeddings --json reports/retrieval-live.json
 python -m evals.agent_run
+python -m evals.agent_demo
 ```
 
 The extraction runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Combined `ok` requires receipt, total, and date. Merchant (normalized) and labelled currency are reported but do not change combined `ok`. Tax is stored, not scored.
@@ -320,6 +322,8 @@ Retrieval evals use 69 labelled questions (64 expected-found, 5 not-found) again
 Scores are evidence for **this fixture set**, not evidence-grounding or production traffic.
 
 `python -m evals.agent_run` scores five scripted agent cases on the production `AgentService`: tool name, argument outcome, stop reason, and whether a write changed `used`. It does not measure a live model's tool choices.
+
+`python -m evals.agent_demo` prints two scripted runs on that same service: a finished count, then a provider failure that keeps the search step. It is a walkthrough, not a score.
 
 ## Tests and CI
 
