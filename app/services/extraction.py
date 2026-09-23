@@ -25,6 +25,9 @@ class UsageLogger(Protocol):
     def log(self, completion: Any, kind: str) -> None: ...
 
 
+ESCALATE_OUTCOMES = frozenset({Outcome.needs_review, Outcome.extraction_failed})
+
+
 class ExtractionService:
     def __init__(
         self,
@@ -32,10 +35,12 @@ class ExtractionService:
         usage: UsageLogger | None = None,
         *,
         prompt: str = EXTRACTION_PROMPT,
+        escalation: LLMProvider | None = None,
     ):
         self._provider = provider
         self._usage = usage
         self._prompt = prompt
+        self._escalation = escalation
 
     def extract_from_text(
         self,
@@ -84,7 +89,38 @@ class ExtractionService:
         kind: str,
         request_id: str | None = None,
     ) -> ReceiptExtract:
-        completion = self._provider.complete(
+        row = self._once(
+            self._provider,
+            messages,
+            currency_hint=currency_hint,
+            kind=kind,
+            request_id=request_id,
+        )
+        if self._escalation is not None and row.outcome in ESCALATE_OUTCOMES:
+            log.info(
+                "extraction_escalated request_id=%s outcome=%s",
+                request_id,
+                row.outcome,
+            )
+            return self._once(
+                self._escalation,
+                messages,
+                currency_hint=currency_hint,
+                kind=f"{kind}_escalation",
+                request_id=request_id,
+            )
+        return row
+
+    def _once(
+        self,
+        provider: LLMProvider,
+        messages: list[dict[str, Any]],
+        *,
+        currency_hint: str,
+        kind: str,
+        request_id: str | None,
+    ) -> ReceiptExtract:
+        completion = provider.complete(
             messages,
             request_id=request_id,
         )

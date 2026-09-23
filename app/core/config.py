@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     model: str = "google/gemini-3.1-flash-lite"
+    escalation_model: str = ""
 
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     seed: int | None = 42
