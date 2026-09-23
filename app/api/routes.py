@@ -2,6 +2,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import (
     get_agent_service,
@@ -171,6 +172,33 @@ def agent(
         )
     except ProviderError as e:
         raise _map_provider_error(e) from e
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@router.post("/v1/agent/stream")
+def agent_stream(
+    req: AgentRequest,
+    request: Request,
+    agent_service: AgentService = Depends(get_agent_service),
+) -> StreamingResponse:
+    def events():
+        try:
+            for item in agent_service.stream(
+                req.question,
+                request_id=request.state.request_id,
+            ):
+                yield _sse(item["event"], item["data"])
+        except ProviderError as exc:
+            mapped = _map_provider_error(exc)
+            detail = (
+                mapped.detail if isinstance(mapped.detail, str) else str(mapped.detail)
+            )
+            yield _sse("error", {"status": mapped.status_code, "detail": detail})
+
+    return StreamingResponse(events(), media_type="text/event-stream")
 
 
 @router.post("/v1/agent/resume", response_model=AgentResponse)

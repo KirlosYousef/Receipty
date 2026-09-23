@@ -160,7 +160,9 @@ Optional `kind` filter: `receipt` \| `merchant_alias` \| `policy_note`.
 
 `POST /v1/agent` is a LangGraph tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` pause the graph with `interrupt()`; the response includes a `thread_id` and `stopped_reason=needs_approval`. `POST /v1/agent/resume` with `{thread_id, approved}` either runs the write or returns a tool error, then continues the loop. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools.
 
-The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart. This is not a streaming endpoint.
+The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart.
+
+`POST /v1/agent/stream` is the same run as server-sent events. Each finished tool call is a `step` event. The last event is `done`, with the same body as `POST /v1/agent`, including `thread_id` when a write is waiting. A provider failure emits an `error` event. The model’s tokens are not streamed one by one.
 
 `python -m app.mcp_server` is a second doorbell for the same `AgentTools` class, over MCP stdio. `query_ledger` still only accepts `sum_total`, `count`, and `totals_by_merchant`. Calling `mark_used` or `flag_for_review` from an MCP client runs the write. `POST /v1/agent` still pauses those writes, because the caller there is the model.
 
@@ -214,6 +216,7 @@ Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost l
 | GET | `/v1/search` | Query `?q=...&strategy=keyword\|dense\|hybrid\|hybrid_rerank&limit=5&kind=receipt\|merchant_alias\|policy_note` |
 | POST | `/v1/ask` | JSON `{"question": "...", "strategy": "hybrid", "limit": 5}` → `{answer, citations, found}` |
 | POST | `/v1/agent` | JSON `{"question": "..."}` → `{answer, stopped_reason, steps, pending_mutation, thread_id}` |
+| POST | `/v1/agent/stream` | Same body as `/v1/agent`, as SSE events `step`, then `done` (or `error`) |
 | POST | `/v1/agent/resume` | JSON `{"thread_id": "...", "approved": true}` → same shape; 404 unknown thread, 409 if not paused |
 | GET | `/v1/usage` | Aggregated cost / tokens (last 50 call rows) |
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Generator, Iterator
 from typing import Any, Literal, TypedDict
 from uuid import uuid4
 
@@ -135,23 +136,59 @@ class AgentService:
     ) -> AgentResponse:
         thread_id = thread_id or str(uuid4())
         config = {"configurable": {"thread_id": thread_id}}
-        self._graph.invoke(
-            {
-                "messages": [
-                    {"role": "system", "content": self._prompt},
-                    {"role": "user", "content": question},
-                ],
-                "steps": [],
-                "pending_calls": [],
-                "pending_mutation": None,
-                "answer": "",
-                "stopped_reason": "",
-                "rounds": 0,
-                "request_id": request_id,
-            },
-            config,
-        )
+        self._graph.invoke(self._initial_state(question, request_id), config)
         return self._response(thread_id, config)
+
+    def stream(
+        self,
+        question: str,
+        *,
+        request_id: str | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield each new tool step, then one final event for the same result as run()."""
+        thread_id = str(uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
+        seen = 0
+        for chunk in self._graph.stream(
+            self._initial_state(question, request_id),
+            config,
+            stream_mode="updates",
+        ):
+            seen = yield from self._emit_new_steps(config, seen)
+            if "__interrupt__" in chunk:
+                yield self._done_event(thread_id, config)
+                return
+        yield self._done_event(thread_id, config)
+
+    def _initial_state(self, question: str, request_id: str | None) -> AgentGraphState:
+        return {
+            "messages": [
+                {"role": "system", "content": self._prompt},
+                {"role": "user", "content": question},
+            ],
+            "steps": [],
+            "pending_calls": [],
+            "pending_mutation": None,
+            "answer": "",
+            "stopped_reason": "",
+            "rounds": 0,
+            "request_id": request_id,
+        }
+
+    def _emit_new_steps(
+        self, config: dict[str, Any], seen: int
+    ) -> Generator[dict[str, Any], None, int]:
+        snapshot = self._graph.get_state(config)
+        steps = (snapshot.values or {}).get("steps") or []
+        for step in steps[seen:]:
+            yield {"event": "step", "data": step}
+        return len(steps)
+
+    def _done_event(self, thread_id: str, config: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "event": "done",
+            "data": self._response(thread_id, config).model_dump(mode="json"),
+        }
 
     def resume(
         self,
