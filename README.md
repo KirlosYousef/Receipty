@@ -303,6 +303,7 @@ python -m evals.run --prompt-version extraction-v1 --json reports/eval.json
 python -m evals.compare reports/run-a.json reports/run-b.json
 python -m evals.retrieval_run --json reports/retrieval-ablation.json
 python -m evals.retrieval_run --live-embeddings --json reports/retrieval-live.json
+python -m evals.agent_run
 ```
 
 The extraction runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Combined `ok` requires receipt, total, and date. Merchant (normalized) and labelled currency are reported but do not change combined `ok`. Tax is stored, not scored.
@@ -317,6 +318,8 @@ Retrieval evals use 69 labelled questions (64 expected-found, 5 not-found) again
 | Combined `ok` | Those three hits. |
 
 Scores are evidence for **this fixture set**, not evidence-grounding or production traffic.
+
+`python -m evals.agent_run` scores five scripted agent cases on the production `AgentService`: tool name, argument outcome, stop reason, and whether a write changed `used`. It does not measure a live model's tool choices.
 
 ## Tests and CI
 
@@ -341,6 +344,7 @@ Covered behavior includes:
 - Agent tool allowlist, write pause until resume, SSE `step` / `done` / `error`
 - MCP server lists and calls the same four tools
 - Deterministic eval safety gate (invented totals must not pass)
+- Scripted agent cases: valid tool calls, rejected SQL, write pause, step cap
 - HTTP mapping, request-id, MIME rejection, lifespan close
 
 ## Config
