@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Generator, Iterator
+import time
+from collections.abc import Callable, Generator, Iterator
 from typing import Any, Literal, TypedDict
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from app.core.exceptions import ProviderError
 from app.domain.schemas import AgentResponse, AgentStep
 from app.llm.prompts import AGENT_PROMPT
 from app.llm.provider import LLMProvider
@@ -29,6 +31,8 @@ PENDING_ANSWER = "This write needs approval before it runs."
 EMPTY_ANSWER = "I could not produce an answer."
 WRITE_APPLIED_ANSWER = "Write applied."
 WRITE_REJECTED_ANSWER = "Write rejected."
+FALLBACK_TIMEOUT = "Stopped because this agent run ran out of time."
+FALLBACK_PROVIDER = "Stopped because the model provider failed."
 
 
 class AgentNotPaused(ValueError):
@@ -44,6 +48,7 @@ class AgentGraphState(TypedDict, total=False):
     stopped_reason: str
     rounds: int
     request_id: str | None
+    started_at: float
 
 
 def _parse_arguments(raw: Any) -> dict[str, Any]:
@@ -118,13 +123,17 @@ class AgentService:
         tools: AgentTools,
         *,
         max_steps: int = 8,
+        deadline_seconds: float = 60.0,
         prompt: str = AGENT_PROMPT,
         checkpointer: Any | None = None,
+        clock: Callable[[], float] | None = None,
     ):
         self._provider = provider
         self._tools = tools
         self._max_steps = max_steps
+        self._deadline_seconds = deadline_seconds
         self._prompt = prompt
+        self._clock = clock or time.monotonic
         self._graph = self._build_graph(checkpointer or InMemorySaver())
 
     def run(
@@ -173,6 +182,7 @@ class AgentService:
             "stopped_reason": "",
             "rounds": 0,
             "request_id": request_id,
+            "started_at": self._clock(),
         }
 
     def _emit_new_steps(
@@ -204,6 +214,7 @@ class AgentService:
             raise LookupError(f"agent thread {thread_id} not found")
         if snapshot.next != ("apply_write",):
             raise AgentNotPaused("agent thread is not waiting for approval")
+        self._graph.update_state(config, {"started_at": self._clock()})
         self._graph.invoke(Command(resume={"approved": approved}), config)
         return self._response(thread_id, config)
 
@@ -220,8 +231,10 @@ class AgentService:
                 thread_id=thread_id,
             )
         stopped = values.get("stopped_reason")
-        reason: Literal["completed", "max_steps", "needs_approval"] = "completed"
-        if stopped in ("completed", "max_steps", "needs_approval"):
+        reason: Literal["completed", "max_steps", "needs_approval", "fallback"] = (
+            "completed"
+        )
+        if stopped in ("completed", "max_steps", "needs_approval", "fallback"):
             reason = stopped
         return AgentResponse(
             answer=values.get("answer") or EMPTY_ANSWER,
@@ -263,12 +276,18 @@ class AgentService:
         return builder.compile(checkpointer=checkpointer)
 
     def _call_model(self, state: AgentGraphState) -> AgentGraphState:
+        if self._out_of_time(state):
+            return self._fallback(FALLBACK_TIMEOUT)
         messages = list(state.get("messages") or [])
-        completion = self._provider.complete(
-            messages,
-            request_id=state.get("request_id"),
-            tools=TOOL_DEFINITIONS,
-        )
+        try:
+            completion = self._provider.complete(
+                messages,
+                request_id=state.get("request_id"),
+                tools=TOOL_DEFINITIONS,
+            )
+        except ProviderError:
+            log.warning("agent_provider_failed request_id=%s", state.get("request_id"))
+            return self._fallback(FALLBACK_PROVIDER)
         message = completion.choices[0].message
         tool_calls = getattr(message, "tool_calls", None) or []
         rounds = int(state.get("rounds") or 0) + 1
@@ -417,10 +436,24 @@ class AgentService:
             "pending_mutation": None,
         }
 
+    def _out_of_time(self, state: AgentGraphState) -> bool:
+        started = state.get("started_at")
+        if started is None:
+            return False
+        return self._clock() - float(started) >= self._deadline_seconds
+
+    def _fallback(self, answer: str) -> AgentGraphState:
+        return {
+            "answer": answer,
+            "stopped_reason": "fallback",
+            "pending_calls": [],
+            "pending_mutation": None,
+        }
+
     def _route_after_model(
         self, state: AgentGraphState
     ) -> Literal["apply_tools"] | Any:
-        if state.get("stopped_reason") == "completed":
+        if state.get("stopped_reason") in ("completed", "fallback"):
             return END
         return "apply_tools"
 

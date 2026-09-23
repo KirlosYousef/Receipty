@@ -61,6 +61,7 @@ def create_app(
             provider,
             AgentTools(repo, retrieval_service),
             max_steps=resolved_settings.max_agent_steps,
+            deadline_seconds=resolved_settings.max_agent_seconds,
         )
 
         app.state.repo = repo
