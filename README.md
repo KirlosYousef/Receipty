@@ -288,6 +288,7 @@ curl -s localhost:8000/v1/agent/resume \
 | Total provider deadline exhausted | 504 |
 | OpenRouter credits exhausted | 402 |
 | Free-tier daily request cap | 429 |
+| Too many ingest, search, ask, or agent calls from one client address in `RATE_LIMIT_WINDOW_SECONDS` | 429 |
 | Other upstream / retry exhaustion | 502 |
 | Unsupported MIME | 400 |
 | Image larger than `MAX_IMAGE_BYTES` | 413 |
@@ -377,6 +378,8 @@ Covered behavior includes:
 | `MAX_AGENT_STEPS` | `8` |
 | `MAX_AGENT_SECONDS` | `60` |
 | `MAX_AGENT_TOKENS` | `16000` |
+| `RATE_LIMIT_REQUESTS` | `60` (set `0` to allow every call) |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` |
 
 ## Out of scope
 
