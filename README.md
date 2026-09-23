@@ -89,7 +89,7 @@ Dashboard / curl
         └─ /v1/agent ──► AgentService (LangGraph + InMemorySaver)
                          model ↔ allowlisted tools, max N rounds
                          reads run; writes interrupt until /v1/agent/resume
-                         time budget or provider failure → stopped_reason=fallback
+                         time, token budget, or provider failure → stopped_reason=fallback
            /v1/agent/stream ──► the same run
                          SSE: step events, then done
 
@@ -164,7 +164,7 @@ Optional `kind` filter: `receipt` \| `merchant_alias` \| `policy_note`.
 
 `POST /v1/ask` always searches `kind=receipt`, builds a `[source_id: …]` context block, and asks the chat model for a strict `AnswerResponse`. No hits, invalid JSON, or provider failure return the fixed not-found message with `found=false` and empty citations. The API does **not** currently reject citations that were not in the retrieved set; `evals/retrieval_scoring.py` measures that faithfulness separately.
 
-`POST /v1/agent` is a LangGraph tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` pause the graph with `interrupt()`; the response includes a `thread_id` and `stopped_reason=needs_approval`. `POST /v1/agent/resume` with `{thread_id, approved}` either runs the write or returns a tool error, then continues the loop. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools. `MAX_AGENT_SECONDS` (default 60) stops the run before another model call when that budget is spent. If the provider fails during a call, the run stops with `stopped_reason=fallback` and keeps any tool steps already finished.
+`POST /v1/agent` is a LangGraph tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` pause the graph with `interrupt()`; the response includes a `thread_id` and `stopped_reason=needs_approval`. `POST /v1/agent/resume` with `{thread_id, approved}` either runs the write or returns a tool error, then continues the loop. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools. `MAX_AGENT_SECONDS` (default 60) stops the run before another model call when that budget is spent. `MAX_AGENT_TOKENS` (default 16000) does the same once the provider has reported that many prompt plus completion tokens on this run. Approving a write does not reset that token count. If the provider fails during a call, the run stops with `stopped_reason=fallback` and keeps any tool steps already finished.
 
 The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart.
 
@@ -376,6 +376,7 @@ Covered behavior includes:
 | `RETRY_BASE_DELAY_SECONDS` | `1` |
 | `MAX_AGENT_STEPS` | `8` |
 | `MAX_AGENT_SECONDS` | `60` |
+| `MAX_AGENT_TOKENS` | `16000` |
 
 ## Out of scope
 

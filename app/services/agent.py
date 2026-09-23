@@ -34,6 +34,7 @@ WRITE_APPLIED_ANSWER = "Write applied."
 WRITE_REJECTED_ANSWER = "Write rejected."
 FALLBACK_TIMEOUT = "Stopped because this agent run ran out of time."
 FALLBACK_PROVIDER = "Stopped because the model provider failed."
+FALLBACK_TOKENS = "Stopped because this agent run used its token budget."
 
 
 class AgentNotPaused(ValueError):
@@ -50,6 +51,16 @@ class AgentGraphState(TypedDict, total=False):
     rounds: int
     request_id: str | None
     started_at: float
+    tokens_used: int
+
+
+def _usage_tokens(completion: Any) -> int:
+    usage = getattr(completion, "usage", None)
+    if usage is None:
+        return 0
+    prompt = getattr(usage, "prompt_tokens", None) or 0
+    completion_tokens = getattr(usage, "completion_tokens", None) or 0
+    return int(prompt) + int(completion_tokens)
 
 
 def _parse_arguments(raw: Any) -> dict[str, Any]:
@@ -125,6 +136,7 @@ class AgentService:
         *,
         max_steps: int = 8,
         deadline_seconds: float = 60.0,
+        token_budget: int = 16000,
         prompt: str = AGENT_PROMPT,
         checkpointer: Any | None = None,
         clock: Callable[[], float] | None = None,
@@ -133,6 +145,7 @@ class AgentService:
         self._tools = tools
         self._max_steps = max_steps
         self._deadline_seconds = deadline_seconds
+        self._token_budget = token_budget
         self._prompt = prompt
         self._clock = clock or time.monotonic
         self._graph = self._build_graph(checkpointer or InMemorySaver())
@@ -185,6 +198,7 @@ class AgentService:
             "rounds": 0,
             "request_id": request_id,
             "started_at": self._clock(),
+            "tokens_used": 0,
         }
 
     def _emit_new_steps(
@@ -280,6 +294,8 @@ class AgentService:
     def _call_model(self, state: AgentGraphState) -> AgentGraphState:
         if self._out_of_time(state):
             return self._fallback(FALLBACK_TIMEOUT)
+        if self._out_of_tokens(state):
+            return self._fallback(FALLBACK_TOKENS)
         messages = list(state.get("messages") or [])
         try:
             completion = self._provider.complete(
@@ -293,10 +309,12 @@ class AgentService:
         message = completion.choices[0].message
         tool_calls = getattr(message, "tool_calls", None) or []
         rounds = int(state.get("rounds") or 0) + 1
+        tokens_used = int(state.get("tokens_used") or 0) + _usage_tokens(completion)
         if not tool_calls:
             answer = (message.content or "").strip() or EMPTY_ANSWER
             return {
                 "rounds": rounds,
+                "tokens_used": tokens_used,
                 "answer": answer,
                 "stopped_reason": "completed",
                 "pending_calls": [],
@@ -305,6 +323,7 @@ class AgentService:
         messages.append(_assistant_tool_message(message))
         return {
             "rounds": rounds,
+            "tokens_used": tokens_used,
             "messages": messages,
             "pending_calls": _serialize_tool_calls(message),
             "stopped_reason": "",
@@ -441,6 +460,9 @@ class AgentService:
             "stopped_reason": "completed",
             "pending_mutation": None,
         }
+
+    def _out_of_tokens(self, state: AgentGraphState) -> bool:
+        return int(state.get("tokens_used") or 0) >= self._token_budget
 
     def _out_of_time(self, state: AgentGraphState) -> bool:
         started = state.get("started_at")

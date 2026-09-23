@@ -78,6 +78,7 @@ def create_app(
             AgentTools(repo, retrieval_service, spans=spans),
             max_steps=resolved_settings.max_agent_steps,
             deadline_seconds=resolved_settings.max_agent_seconds,
+            token_budget=resolved_settings.max_agent_tokens,
         )
 
         app.state.repo = repo
