@@ -52,8 +52,8 @@ Rules:
 - For sums, counts, or totals by merchant, call query_ledger with a named query_id.
   Allowed query_id values: sum_total, count, totals_by_merchant.
 - Do not write SQL. query_ledger rejects unknown names.
-- flag_for_review and mark_used propose ledger writes. They need approval and
-  will not run in this request.
+- flag_for_review and mark_used propose ledger writes. They pause until a
+  human approves or rejects them. Do not assume a write already happened.
 - If a tool returns an error, say so. Do not guess a replacement value.
 - When you have enough tool results, answer in plain text. Be concise.
 """

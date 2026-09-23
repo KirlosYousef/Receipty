@@ -13,7 +13,7 @@ from app.domain.schemas import Outcome, ReceiptExtract
 from app.llm.embeddings import HashEmbeddingProvider
 from app.main import create_app
 from app.repository.receipts import SqliteReceiptRepository
-from app.services.agent import PENDING_ANSWER, AgentService
+from app.services.agent import PENDING_ANSWER, AgentNotPaused, AgentService
 from app.services.indexing import IndexingService
 from app.services.retrieval import RetrievalService, SqliteRetrievalRepository
 from app.services.tools import TOOL_DEFINITIONS, AgentTools
@@ -134,6 +134,7 @@ def test_write_tools_pause_without_mutating(tmp_path: Path):
     }
     assert int(repo.get(receipt_id)["used"]) == 0
     assert len(provider.calls) == 1
+    assert result.thread_id
 
 
 def test_invalid_write_args_do_not_pause(tmp_path: Path):
@@ -294,3 +295,128 @@ def test_agent_http_runs_read_tools(tmp_path: Path):
         assert body["stopped_reason"] == "completed"
         assert body["steps"][0]["tool"] == "query_ledger"
         assert body["steps"][0]["result"]["n"] == 1
+        assert body["thread_id"]
+
+
+def test_resume_approved_applies_write_then_continues(tmp_path: Path):
+    tools, repo, receipt_id = _seed(tmp_path)
+    provider = ScriptedProvider(
+        [
+            _completion(
+                tool_calls=[_tool_call("mark_used", {"receipt_id": receipt_id})]
+            ),
+            _completion(content="Marked that receipt as used."),
+        ]
+    )
+    service = AgentService(provider, tools)
+    paused = service.run("Mark that receipt used.")
+    assert paused.stopped_reason == "needs_approval"
+    assert int(repo.get(receipt_id)["used"]) == 0
+    done = service.resume(paused.thread_id, approved=True)
+    assert done.stopped_reason == "completed"
+    assert done.thread_id == paused.thread_id
+    assert int(repo.get(receipt_id)["used"]) == 1
+    assert done.steps[0].status == "ok"
+    assert done.pending_mutation is None
+    assert len(provider.calls) == 2
+
+
+def test_resume_rejected_does_not_mutate(tmp_path: Path):
+    tools, repo, receipt_id = _seed(tmp_path)
+    provider = ScriptedProvider(
+        [
+            _completion(
+                tool_calls=[_tool_call("mark_used", {"receipt_id": receipt_id})]
+            ),
+            _completion(content="The write was rejected."),
+        ]
+    )
+    service = AgentService(provider, tools)
+    paused = service.run("Mark that receipt used.")
+    done = service.resume(paused.thread_id, approved=False)
+    assert done.stopped_reason == "completed"
+    assert int(repo.get(receipt_id)["used"]) == 0
+    assert done.steps[0].status == "error"
+    assert "rejected" in done.steps[0].result["error"]
+
+
+def test_resume_unknown_or_finished_thread_fails(tmp_path: Path):
+    tools, _repo, _receipt_id = _seed(tmp_path)
+    provider = ScriptedProvider([_completion(content="No tools needed.")])
+    service = AgentService(provider, tools)
+    done = service.run("Hello.")
+    with pytest.raises(LookupError, match="not found"):
+        service.resume("missing-thread", approved=True)
+    with pytest.raises(AgentNotPaused):
+        service.resume(done.thread_id, approved=True)
+
+
+def test_approve_at_max_steps_applies_write_without_another_model_call(
+    tmp_path: Path,
+):
+    tools, repo, receipt_id = _seed(tmp_path)
+    provider = ScriptedProvider(
+        [
+            _completion(
+                tool_calls=[_tool_call("mark_used", {"receipt_id": receipt_id})]
+            ),
+            _completion(content="should not be called"),
+        ]
+    )
+    service = AgentService(provider, tools, max_steps=1)
+    paused = service.run("Mark that receipt used.")
+    done = service.resume(paused.thread_id, approved=True)
+    assert done.stopped_reason == "completed"
+    assert done.answer == "Write applied."
+    assert int(repo.get(receipt_id)["used"]) == 1
+    assert len(provider.calls) == 1
+
+
+def test_agent_http_resume_approve_and_errors(tmp_path: Path):
+    provider = ScriptedProvider([])
+    settings = Settings(
+        openrouter_api_key="test-key",
+        db_path=tmp_path / "hitl.db",
+        cost_log_path=tmp_path / "cost.jsonl",
+    )
+    app = create_app(
+        settings=settings,
+        provider_factory=lambda _: provider,
+        embedding_factory=lambda _: HashEmbeddingProvider(),
+    )
+    with TestClient(app) as client:
+        extract = ReceiptExtract(
+            is_receipt=True,
+            merchant="Taco Bell",
+            total="7.61",
+            currency="USD",
+            date="2016-09-01",
+            outcome=Outcome.success,
+        )
+        saved = app.state.repo.save(extract)
+        provider._completions = [
+            _completion(tool_calls=[_tool_call("mark_used", {"receipt_id": saved})]),
+            _completion(content="Marked as used."),
+        ]
+        paused = client.post("/v1/agent", json={"question": "Mark that receipt used."})
+        assert paused.status_code == 200
+        body = paused.json()
+        assert body["stopped_reason"] == "needs_approval"
+        assert int(app.state.repo.get(saved)["used"]) == 0
+        missing = client.post(
+            "/v1/agent/resume",
+            json={"thread_id": "missing-thread", "approved": True},
+        )
+        assert missing.status_code == 404
+        done = client.post(
+            "/v1/agent/resume",
+            json={"thread_id": body["thread_id"], "approved": True},
+        )
+        assert done.status_code == 200
+        assert done.json()["stopped_reason"] == "completed"
+        assert int(app.state.repo.get(saved)["used"]) == 1
+        again = client.post(
+            "/v1/agent/resume",
+            json={"thread_id": body["thread_id"], "approved": True},
+        )
+        assert again.status_code == 409

@@ -143,6 +143,11 @@ class AgentRequest(BaseModel):
     question: str = Field(min_length=1)
 
 
+class AgentResumeRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=64)
+    approved: bool
+
+
 class AgentStep(BaseModel):
     tool: str
     args: dict[str, Any]
@@ -155,3 +160,4 @@ class AgentResponse(BaseModel):
     stopped_reason: Literal["completed", "max_steps", "needs_approval"]
     steps: list[AgentStep]
     pending_mutation: dict[str, Any] | None = None
+    thread_id: str
