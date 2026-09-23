@@ -107,4 +107,6 @@ def test_agent_stream_http_and_provider_error(tmp_path):
             "POST", "/v1/agent/stream", json={"question": "How many receipts?"}
         ) as response:
             error_events = _parse_sse("".join(response.iter_text()))
-        assert error_events == [("error", {"status": 502, "detail": "upstream down"})]
+        assert error_events[-1][0] == "done"
+        assert error_events[-1][1]["stopped_reason"] == "fallback"
+        assert "provider failed" in error_events[-1][1]["answer"]

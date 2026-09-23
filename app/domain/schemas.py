@@ -157,7 +157,7 @@ class AgentStep(BaseModel):
 
 class AgentResponse(BaseModel):
     answer: str
-    stopped_reason: Literal["completed", "max_steps", "needs_approval"]
+    stopped_reason: Literal["completed", "max_steps", "needs_approval", "fallback"]
     steps: list[AgentStep]
     pending_mutation: dict[str, Any] | None = None
     thread_id: str

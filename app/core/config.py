@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     retry_base_delay_seconds: float = Field(default=1.0, ge=0)
     request_timeout_seconds: float = Field(default=60.0, gt=0)
     max_agent_steps: int = Field(default=8, ge=1, le=20)
+    max_agent_seconds: float = Field(default=60.0, gt=0)
 
 
 @lru_cache
