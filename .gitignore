@@ -21,7 +21,9 @@ logs/
 .DS_Store
 .vscode/
 .idea/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 
 # Local evaluation artifacts
 reports/

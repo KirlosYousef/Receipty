@@ -1,12 +1,12 @@
 # Receipty
 
-**Constrained multimodal receipt extraction, plus grounded retrieval.** A vision-capable LLM reads a receipt photo or pasted text and returns schema-valid `{merchant, total, currency, date, tax}` — or an explicit outcome when it cannot. Totals are never invented. Indexed receipts can then be searched (keyword / dense / hybrid / hybrid+rerank) and answered with **receipt-ID citations**, or an explicit not-found response.
+**Constrained multimodal receipt extraction, grounded retrieval, and a bounded ledger agent.** A vision-capable LLM reads a receipt photo or pasted text and returns schema-valid `{merchant, total, currency, date, tax}` — or an explicit outcome when it cannot. Totals are never invented. Indexed receipts can then be searched (keyword / dense / hybrid / hybrid+rerank) and answered with **receipt-ID citations**, or an explicit not-found response. A separate agent can call allowlisted ledger tools over several steps. Writes wait for approval on the HTTP agent. The same tools are also available over MCP stdio.
 
-Receipty is a production-minded FastAPI service: OpenRouter chat completions with **strict JSON schema**, Pydantic validation, locale-aware money parsing, deterministic post-rules, a SQLite or Postgres+pgvector ledger, embedding-backed retrieval, cost logging, and labeled eval harnesses on the **same extraction and retrieval paths** the API uses.
+Receipty is a production-minded FastAPI service: OpenRouter chat completions with **strict JSON schema**, Pydantic validation, locale-aware money parsing, deterministic post-rules, a SQLite or Postgres+pgvector ledger, embedding-backed retrieval, a LangGraph tool loop, an MCP stdio server for those same tools, cost logging, and labeled eval harnesses on the **same extraction and retrieval paths** the API uses.
 
 | Stack | |
 | --- | --- |
-| Runtime | Python 3.12, FastAPI, Uvicorn, Pydantic v2, LangGraph |
+| Runtime | Python 3.12, FastAPI, Uvicorn, Pydantic v2, LangGraph, MCP |
 | Models | OpenAI SDK → [OpenRouter](https://openrouter.ai): chat `google/gemini-3.1-flash-lite`, embeddings `openai/text-embedding-3-small` |
 | Data | SQLite by default; Postgres + pgvector when `DATABASE_URL` is set. JSONL cost log. |
 | UI | Static scan-deck dashboard (multi-upload, review board, usage pulse) |
@@ -86,6 +86,8 @@ Dashboard / curl
         └─ /v1/agent ──► AgentService (LangGraph + InMemorySaver)
                          model ↔ allowlisted tools, max N rounds
                          reads run; writes interrupt until /v1/agent/resume
+           /v1/agent/stream ──► the same run
+                         SSE: step events, then done
 
 MCP stdio (`python -m app.mcp_server`) calls the same four Python tools.
 Writes run immediately there, because the MCP client invoked the tool.
@@ -116,7 +118,7 @@ Local default is SQLite (`DB_PATH=receipts.db`). Set `DATABASE_URL` for Postgres
 
 `extraction-v2-evidence` is a documented experiment (stricter TOTAL/AMOUNT DUE wording). It did not beat v1 on the labelled contract; v1 remains production. See [EVALS.md](EVALS.md).
 
-**Structured output** (`app/llm/provider.py`): every completion requests
+**Structured output** (`app/llm/provider.py`): extraction completions request
 
 ```json
 {
@@ -129,7 +131,7 @@ Local default is SQLite (`DB_PATH=receipts.db`). Set `DATABASE_URL` for Postgres
 }
 ```
 
-plus OpenRouter `provider.require_parameters: true`. Completions also send `temperature` (default `0.0`) and `seed` (default `42`) so extraction is as deterministic as the provider allows. The SDK’s own retries are off (`max_retries=0`) so backoff, timeouts, and billing/rate-limit mapping live in one place.
+plus OpenRouter `provider.require_parameters: true`. `POST /v1/ask` sends the `AnswerResponse` schema instead. Agent completions send `tools` and skip the extraction schema. Completions also send `temperature` (default `0.0`) and `seed` (default `42`) so extraction is as deterministic as the provider allows. The SDK’s own retries are off (`max_retries=0`) so backoff, timeouts, and billing/rate-limit mapping live in one place.
 
 **Fail closed** (`app/services/extraction.py`): missing message content or `ValidationError` becomes `is_receipt=false`, `outcome=extraction_failed`. Markdown fences are stripped as a defensive fallback; they are not a license to invent fields.
 
@@ -160,7 +162,9 @@ Optional `kind` filter: `receipt` \| `merchant_alias` \| `policy_note`.
 
 `POST /v1/agent` is a LangGraph tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` pause the graph with `interrupt()`; the response includes a `thread_id` and `stopped_reason=needs_approval`. `POST /v1/agent/resume` with `{thread_id, approved}` either runs the write or returns a tool error, then continues the loop. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools.
 
-The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart. This is not a streaming endpoint.
+The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart.
+
+`POST /v1/agent/stream` is the same run as server-sent events. Each finished tool call is a `step` event. The last event is `done`, with the same body as `POST /v1/agent`, including `thread_id` when a write is waiting. A provider failure emits an `error` event. The model’s tokens are not streamed one by one.
 
 `python -m app.mcp_server` is a second doorbell for the same `AgentTools` class, over MCP stdio. `query_ledger` still only accepts `sum_total`, `count`, and `totals_by_merchant`. Calling `mark_used` or `flag_for_review` from an MCP client runs the write. `POST /v1/agent` still pauses those writes, because the caller there is the model.
 
@@ -186,9 +190,11 @@ source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env   # set OPENROUTER_API_KEY
 python -m uvicorn app.main:app --reload
+# optional: MCP stdio server for the same four ledger tools
+python -m app.mcp_server
 ```
 
-Get an OpenRouter key at [openrouter.ai](https://openrouter.ai). The default chat model must accept `image_url`. Leave `DATABASE_URL` empty to use local SQLite.
+Get an OpenRouter key at [openrouter.ai](https://openrouter.ai). The default chat model must accept `image_url`. Leave `DATABASE_URL` empty to use local SQLite. Run commands with the project virtualenv (`source .venv/bin/activate`), not a system Python that does not have these dependencies. `python -m app.mcp_server` waits on stdin for an MCP client. It does not print a URL.
 
 ### Docker
 
@@ -214,6 +220,7 @@ Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost l
 | GET | `/v1/search` | Query `?q=...&strategy=keyword\|dense\|hybrid\|hybrid_rerank&limit=5&kind=receipt\|merchant_alias\|policy_note` |
 | POST | `/v1/ask` | JSON `{"question": "...", "strategy": "hybrid", "limit": 5}` → `{answer, citations, found}` |
 | POST | `/v1/agent` | JSON `{"question": "..."}` → `{answer, stopped_reason, steps, pending_mutation, thread_id}` |
+| POST | `/v1/agent/stream` | Same body as `/v1/agent`, as SSE events `step`, then `done` (or `error`) |
 | POST | `/v1/agent/resume` | JSON `{"thread_id": "...", "approved": true}` → same shape; 404 unknown thread, 409 if not paused |
 | GET | `/v1/usage` | Aggregated cost / tokens (last 50 call rows) |
 
@@ -262,6 +269,9 @@ curl -s localhost:8000/v1/ask \
 curl -s localhost:8000/v1/agent \
   -H 'content-type: application/json' \
   -d '{"question":"How much did I spend at Taco Bell?"}'
+curl -N localhost:8000/v1/agent/stream \
+  -H 'content-type: application/json' \
+  -d '{"question":"How much did I spend at Taco Bell?"}'
 curl -s localhost:8000/v1/agent/resume \
   -H 'content-type: application/json' \
   -d '{"thread_id":"THREAD_ID","approved":true}'
@@ -280,6 +290,8 @@ curl -s localhost:8000/v1/agent/resume \
 | Empty search query / bad strategy or limit | 400 |
 | Unknown agent thread | 404 |
 | Resume when the agent is not waiting | 409 |
+
+`POST /v1/agent/stream` uses the same provider failures. The HTTP status stays 200 and the stream emits `event: error` with `status` and `detail`.
 
 ## Evaluation
 
@@ -326,6 +338,8 @@ Covered behavior includes:
 - Money parsing, ISO currency normalization, outcomes, malformed JSON
 - Provider retries, jitter, deadline, non-retryable errors
 - Indexing, keyword/dense/hybrid/rerank retrieval, grounded ask / not-found
+- Agent tool allowlist, write pause until resume, SSE `step` / `done` / `error`
+- MCP server lists and calls the same four tools
 - Deterministic eval safety gate (invented totals must not pass)
 - HTTP mapping, request-id, MIME rejection, lifespan close
 
@@ -347,6 +361,7 @@ Covered behavior includes:
 | `REQUEST_TIMEOUT_SECONDS` | `60` |
 | `TOTAL_DEADLINE_SECONDS` | `120` |
 | `RETRY_BASE_DELAY_SECONDS` | `1` |
+| `MAX_AGENT_STEPS` | `8` |
 
 ## Out of scope
 
