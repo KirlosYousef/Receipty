@@ -5,9 +5,10 @@ from typing import Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.rate_limit import LIMITED_ROUTES, RateLimiter
 from app.api.routes import router
 from app.core.config import Settings, get_settings
 from app.llm.embeddings import (
@@ -94,6 +95,10 @@ def create_app(
             provider.close()
 
     app = FastAPI(title="Receipty", lifespan=lifespan)
+    limiter = RateLimiter(
+        resolved_settings.rate_limit_requests,
+        resolved_settings.rate_limit_window_seconds,
+    )
 
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
@@ -105,6 +110,18 @@ def create_app(
             request_id = str(uuid4())
 
         request.state.request_id = request_id
+        client = request.client.host if request.client else "unknown"
+        route = (request.method, request.url.path)
+        if route in LIMITED_ROUTES and not limiter.allow(client):
+            response = JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Try again later."},
+                headers={
+                    "Retry-After": str(int(resolved_settings.rate_limit_window_seconds))
+                },
+            )
+            response.headers["X-Request-ID"] = request_id
+            return response
 
         with bind_request_id(request_id):
             response = await call_next(request)

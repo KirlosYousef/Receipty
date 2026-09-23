@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     max_agent_steps: int = Field(default=8, ge=1, le=20)
     max_agent_seconds: float = Field(default=60.0, gt=0)
     max_agent_tokens: int = Field(default=16000, ge=1)
+    rate_limit_requests: int = Field(default=60, ge=0)
+    rate_limit_window_seconds: float = Field(default=60.0, gt=0)
 
 
 @lru_cache
