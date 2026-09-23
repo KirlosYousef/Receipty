@@ -45,6 +45,7 @@ Aimed at AI / applied-ML engineering work: shipping extraction and retrieval sys
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
 | **Cost observability** | Per-call prompt/completion tokens and USD → `logs/cost.jsonl`; aggregated on `GET /v1/usage` and the dashboard. |
 | **Step traces** | Each chat completion, embedding call, retrieval, and tool call appends one JSON line to `logs/traces.jsonl`: request id, duration, model, token counts, provider USD cost when present, and `error.type` when the step fails. Tool arguments are not stored. |
+| **Embedding cache** | The same text reuses its vector for the life of the process, up to `EMBEDDING_CACHE_SIZE` entries. A cache hit skips the embedding provider, so it writes no embedding span and no cost line. Restarting the process drops the cache. |
 | **Testability** | `LLMProvider` / `EmbeddingProvider` protocols + `create_app(provider_factory=...)`. CI runs lint, types, a deterministic eval safety gate, coverage, and `pip-audit` **without** a live API key. |
 
 ## Truthful extraction contract
@@ -361,6 +362,7 @@ Covered behavior includes:
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `MODEL` | `google/gemini-3.1-flash-lite` |
 | `EMBEDDING_MODEL` | `openai/text-embedding-3-small` |
+| `EMBEDDING_CACHE_SIZE` | `256` (set `0` to call the embedding provider every time) |
 | `TEMPERATURE` | `0.0` |
 | `SEED` | `42` |
 | `DB_PATH` | `receipts.db` (SQLite when `DATABASE_URL` is unset) |

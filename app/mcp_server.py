@@ -6,7 +6,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from app.core.config import Settings, get_settings
-from app.llm.embeddings import OpenRouterEmbeddings
+from app.llm.embeddings import CachingEmbeddings, OpenRouterEmbeddings
 from app.repository.receipts import build_repository
 from app.services.retrieval import RetrievalService, build_retrieval_repository
 from app.services.tools import AgentTools, LedgerQueryId
@@ -72,7 +72,10 @@ def build_server(settings: Settings | None = None) -> FastMCP:
             db_path=resolved.db_path,
             database_url=resolved.database_url,
         ),
-        OpenRouterEmbeddings(resolved),
+        CachingEmbeddings(
+            OpenRouterEmbeddings(resolved),
+            max_entries=resolved.embedding_cache_size,
+        ),
     )
     return create_server(AgentTools(repo, retrieval))
 

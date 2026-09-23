@@ -10,7 +10,11 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.core.config import Settings, get_settings
-from app.llm.embeddings import EmbeddingProvider, OpenRouterEmbeddings
+from app.llm.embeddings import (
+    CachingEmbeddings,
+    EmbeddingProvider,
+    OpenRouterEmbeddings,
+)
 from app.llm.provider import LLMProvider, OpenRouterProvider
 from app.observability.tracing import SpanRecorder, bind_request_id
 from app.observability.usage import UsageLogger
@@ -54,6 +58,10 @@ def create_app(
             embeddings = OpenRouterEmbeddings(resolved_settings, spans=spans)
         else:
             embeddings = embedding_factory(resolved_settings)
+        embeddings = CachingEmbeddings(
+            embeddings,
+            max_entries=resolved_settings.embedding_cache_size,
+        )
         usage = UsageLogger(resolved_settings.cost_log_path)
         service = ExtractionService(provider, usage)
         indexer = IndexingService(repo, embeddings)
