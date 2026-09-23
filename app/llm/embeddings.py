@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import math
+import threading
+from collections import OrderedDict
 from typing import Protocol
 
 from app.core.config import Settings
@@ -11,6 +13,32 @@ from app.repository.receipts import EMBEDDING_DIMENSIONS
 
 class EmbeddingProvider(Protocol):
     def embed(self, text: str) -> list[float]: ...
+
+
+class CachingEmbeddings:
+    """Reuse a vector for the same text. The cache lives in this process."""
+
+    def __init__(self, inner: EmbeddingProvider, *, max_entries: int):
+        self._inner = inner
+        self._max_entries = max_entries
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def embed(self, text: str) -> list[float]:
+        if self._max_entries <= 0:
+            return self._inner.embed(text)
+        with self._lock:
+            cached = self._cache.get(text)
+            if cached is not None:
+                self._cache.move_to_end(text)
+                return list(cached)
+        vector = list(self._inner.embed(text))
+        with self._lock:
+            self._cache[text] = vector
+            self._cache.move_to_end(text)
+            while len(self._cache) > self._max_entries:
+                self._cache.popitem(last=False)
+        return list(vector)
 
 
 class HashEmbeddingProvider:
