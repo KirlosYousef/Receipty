@@ -303,3 +303,18 @@ python -m evals.retrieval_run --live-embeddings --json reports/retrieval-live.js
 Hash embeddings are not semantic. Use `--live-embeddings` before citing dense or
 hybrid numbers. Keyword and `hybrid_rerank` are meaningful with either provider
 because they use term overlap.
+
+## Scripted agent tool checks
+
+`evals/agent_cases.jsonl` has five cases. A scripted provider proposes the tool
+calls, and `AgentService` runs them. The check scores the first tool name, its
+status, the stop reason, and whether the seeded receipt's `used` flag changed.
+
+```bash
+python -m evals.agent_run
+```
+
+This is a safety check of the production agent path. It does not measure how
+often a live model picks the right tool. A write case must stop at
+`needs_approval` with `used` still false. The SQL case must end in a tool
+error. The loop case must stop at `max_steps`.
