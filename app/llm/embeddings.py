@@ -5,6 +5,7 @@ import math
 from typing import Protocol
 
 from app.core.config import Settings
+from app.observability.tracing import SpanRecorder
 from app.repository.receipts import EMBEDDING_DIMENSIONS
 
 
@@ -30,7 +31,7 @@ class HashEmbeddingProvider:
 
 
 class OpenRouterEmbeddings:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, spans: SpanRecorder | None = None):
         from openai import OpenAI
 
         from app.core.exceptions import ProviderError
@@ -38,6 +39,7 @@ class OpenRouterEmbeddings:
         if not settings.openrouter_api_key:
             raise ProviderError("OPENROUTER_API_KEY is not set")
         self._model = settings.embedding_model
+        self._spans = spans or SpanRecorder(None)
         self._client = OpenAI(
             base_url=settings.openrouter_base_url,
             api_key=settings.openrouter_api_key,
@@ -45,7 +47,15 @@ class OpenRouterEmbeddings:
         )
 
     def embed(self, text: str) -> list[float]:
-        response = self._client.embeddings.create(model=self._model, input=text)
+        with self._spans.span(
+            f"embeddings {self._model}",
+            {
+                "gen_ai.operation.name": "embeddings",
+                "gen_ai.provider.name": "openrouter",
+                "gen_ai.request.model": self._model,
+            },
+        ):
+            response = self._client.embeddings.create(model=self._model, input=text)
         vector = list(response.data[0].embedding)
         if len(vector) != EMBEDDING_DIMENSIONS:
             raise ValueError(

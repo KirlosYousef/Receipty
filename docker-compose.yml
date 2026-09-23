@@ -7,6 +7,7 @@ services:
     environment:
       DB_PATH: /app/data/receipts.db
       COST_LOG_PATH: /app/logs/cost.jsonl
+      TRACE_LOG_PATH: /app/logs/traces.jsonl
       DATABASE_URL: postgres://receipty:receipty@db:5432/receipty
     volumes:
       - receipty_data:/app/data

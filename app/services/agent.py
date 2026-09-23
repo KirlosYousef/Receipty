@@ -15,6 +15,7 @@ from app.core.exceptions import ProviderError
 from app.domain.schemas import AgentResponse, AgentStep
 from app.llm.prompts import AGENT_PROMPT
 from app.llm.provider import LLMProvider
+from app.observability.tracing import bind_request_id
 from app.services.tools import (
     TOOL_DEFINITIONS,
     WRITE_TOOLS,
@@ -145,7 +146,8 @@ class AgentService:
     ) -> AgentResponse:
         thread_id = thread_id or str(uuid4())
         config = {"configurable": {"thread_id": thread_id}}
-        self._graph.invoke(self._initial_state(question, request_id), config)
+        with bind_request_id(request_id):
+            self._graph.invoke(self._initial_state(question, request_id), config)
         return self._response(thread_id, config)
 
     def stream(
@@ -207,7 +209,6 @@ class AgentService:
         approved: bool,
         request_id: str | None = None,
     ) -> AgentResponse:
-        del request_id
         config = {"configurable": {"thread_id": thread_id}}
         snapshot = self._graph.get_state(config)
         if not snapshot.values:
@@ -215,7 +216,8 @@ class AgentService:
         if snapshot.next != ("apply_write",):
             raise AgentNotPaused("agent thread is not waiting for approval")
         self._graph.update_state(config, {"started_at": self._clock()})
-        self._graph.invoke(Command(resume={"approved": approved}), config)
+        with bind_request_id(request_id):
+            self._graph.invoke(Command(resume={"approved": approved}), config)
         return self._response(thread_id, config)
 
     def _response(self, thread_id: str, config: dict[str, Any]) -> AgentResponse:
@@ -345,7 +347,7 @@ class AgentService:
                 break
 
             try:
-                payload = self._tools.dispatch(name, args)
+                payload = self._dispatch(state, name, args)
                 status: Literal["ok", "error"] = "ok"
             except ToolError as exc:
                 payload = {"error": str(exc)}
@@ -371,6 +373,10 @@ class AgentService:
             "pending_mutation": None,
         }
 
+    def _dispatch(self, state: AgentGraphState, name: str, args: dict[str, Any]) -> Any:
+        with bind_request_id(state.get("request_id")):
+            return self._tools.dispatch(name, args)
+
     def _apply_write(self, state: AgentGraphState) -> AgentGraphState:
         pending = state.get("pending_mutation")
         if not pending:
@@ -382,7 +388,7 @@ class AgentService:
         messages = list(state.get("messages") or [])
         if _approved(decision):
             try:
-                payload = self._tools.dispatch(pending["tool"], pending["args"])
+                payload = self._dispatch(state, pending["tool"], pending["args"])
                 status = "ok"
             except ToolError as exc:
                 payload = {"error": str(exc)}

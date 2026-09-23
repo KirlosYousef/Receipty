@@ -5,6 +5,7 @@ import math
 from typing import Any, Protocol
 
 from app.llm.embeddings import EmbeddingProvider
+from app.observability.tracing import SpanRecorder
 
 SEARCH_STRATEGIES = ("keyword", "dense", "hybrid", "hybrid_rerank")
 _CANDIDATE_MULTIPLIER = 4
@@ -279,9 +280,12 @@ class RetrievalService:
         self,
         repo: RetrievalRepository,
         embeddings: EmbeddingProvider,
+        *,
+        spans: SpanRecorder | None = None,
     ):
         self._repo = repo
         self._embeddings = embeddings
+        self._spans = spans or SpanRecorder(None)
 
     def search(
         self,
@@ -290,6 +294,23 @@ class RetrievalService:
         strategy: str = "hybrid",
         limit: int = 5,
         kind: str | None = None,
+    ) -> list[dict]:
+        with self._spans.span(
+            "retrieval",
+            {
+                "gen_ai.operation.name": "retrieval",
+                "receipty.retrieval.strategy": strategy,
+            },
+        ):
+            return self._search(query, strategy=strategy, limit=limit, kind=kind)
+
+    def _search(
+        self,
+        query: str,
+        *,
+        strategy: str,
+        limit: int,
+        kind: str | None,
     ) -> list[dict]:
         if strategy == "keyword":
             return self._repo.search_keyword(query, limit=limit, kind=kind)

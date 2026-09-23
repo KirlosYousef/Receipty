@@ -17,6 +17,7 @@ from app.core.exceptions import (
     ProviderError,
 )
 from app.domain.schemas import ReceiptLLMOutput
+from app.observability.tracing import SpanRecorder, current_request_id
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class OpenRouterProvider:
         sleep_fn: Callable[[float], None] | None = None,
         jitter_fn: Callable[[float], float] | None = None,
         clock: Callable[[], float] | None = None,
+        spans: SpanRecorder | None = None,
     ):
         if not settings.openrouter_api_key:
             raise ProviderError("OPENROUTER_API_KEY is not set")
@@ -54,6 +56,7 @@ class OpenRouterProvider:
         self._sleep = sleep_fn or time.sleep
         self._jitter = jitter_fn or _full_jitter
         self._clock = clock or time.monotonic
+        self._spans = spans or SpanRecorder(None)
 
         self._client = OpenAI(
             base_url=settings.openrouter_base_url,
@@ -62,6 +65,44 @@ class OpenRouterProvider:
         )
 
     def complete(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        request_id: str | None = None,
+        response_format: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Any:
+        attributes: dict[str, Any] = {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "openrouter",
+            "gen_ai.request.model": self._settings.model,
+            "request_id": request_id
+            if request_id is not None
+            else current_request_id(),
+        }
+        with self._spans.span(f"chat {self._settings.model}", attributes) as span:
+            completion = self._complete(
+                messages,
+                request_id=request_id,
+                response_format=response_format,
+                tools=tools,
+            )
+            usage = getattr(completion, "usage", None)
+            if usage is not None:
+                span["gen_ai.usage.input_tokens"] = getattr(
+                    usage, "prompt_tokens", None
+                )
+                span["gen_ai.usage.output_tokens"] = getattr(
+                    usage, "completion_tokens", None
+                )
+                extra = getattr(usage, "model_extra", None) or {}
+                cost = getattr(usage, "cost", None)
+                span["gen_ai.usage.cost"] = (
+                    cost if cost is not None else extra.get("cost")
+                )
+            return completion
+
+    def _complete(
         self,
         messages: list[dict[str, Any]],
         *,

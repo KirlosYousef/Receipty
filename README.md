@@ -44,6 +44,7 @@ Aimed at AI / applied-ML engineering work: shipping extraction and retrieval sys
 | **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default. Prompt versions (`extraction-v1` production; `extraction-v2-evidence` experiment) are hashed in eval reports. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
 | **Cost observability** | Per-call prompt/completion tokens and USD → `logs/cost.jsonl`; aggregated on `GET /v1/usage` and the dashboard. |
+| **Step traces** | Each chat completion, embedding call, retrieval, and tool call appends one JSON line to `logs/traces.jsonl`: request id, duration, model, token counts, provider USD cost when present, and `error.type` when the step fails. Tool arguments are not stored. |
 | **Testability** | `LLMProvider` / `EmbeddingProvider` protocols + `create_app(provider_factory=...)`. CI runs lint, types, a deterministic eval safety gate, coverage, and `pip-audit` **without** a live API key. |
 
 ## Truthful extraction contract
@@ -75,6 +76,7 @@ Dashboard / curl
         │                    ├──► ReceiptRepository (SQLite | Postgres)
         │                    ├──► IndexingService (embed + documents table)
         │                    └──► UsageLogger (JSONL cost)
+        │                         SpanRecorder (JSONL traces)
         │
         ├─ /v1/search ──► RetrievalService
         │                   keyword | dense | hybrid | hybrid_rerank
@@ -104,7 +106,7 @@ app/
   mcp_server.py   MCP stdio entry; same AgentTools
   repository/     SQLite or Postgres+pgvector ledger and document store
   seed/           merchant aliases + policy notes
-  observability/  per-call cost JSONL
+  observability/  per-call cost JSONL and step traces
   static/         scan-deck dashboard
 evals/            extraction fixtures, retrieval questions, runners, scoring
 EVALS.md          eval contract, baselines, how to run
@@ -345,7 +347,7 @@ Covered behavior includes:
 - Money parsing, ISO currency normalization, outcomes, malformed JSON
 - Provider retries, jitter, deadline, non-retryable errors
 - Indexing, keyword/dense/hybrid/rerank retrieval, grounded ask / not-found
-- Agent tool allowlist, write pause until resume, SSE `step` / `done` / `error`
+- Agent tool allowlist, write pause until resume, SSE `step` / `done`, fallback stop
 - MCP server lists and calls the same four tools
 - Deterministic eval safety gate (invented totals must not pass)
 - Scripted agent cases: valid tool calls, rejected SQL, write pause, step cap
@@ -364,6 +366,7 @@ Covered behavior includes:
 | `DB_PATH` | `receipts.db` (SQLite when `DATABASE_URL` is unset) |
 | `DATABASE_URL` | unset (optional Postgres, e.g. `postgres://receipty:receipty@localhost:5432/receipty`) |
 | `COST_LOG_PATH` | `logs/cost.jsonl` |
+| `TRACE_LOG_PATH` | `logs/traces.jsonl` |
 | `MAX_IMAGE_BYTES` | `8388608` |
 | `MAX_ATTEMPTS` | `3` |
 | `REQUEST_TIMEOUT_SECONDS` | `60` |
