@@ -39,7 +39,7 @@ Aimed at AI / applied-ML engineering work: shipping extraction and retrieval sys
 | **Post-LLM rules** | Non-receipts scrub merchant/money/date. Missing total forces `needs_review`. Unique text hints or copied symbols map to ISO currency. Negative totals need review. |
 | **Hybrid retrieval** | Keyword, dense (cosine / pgvector), hybrid merge, and hybrid + lexical rerank over receipt docs, merchant aliases, and policy notes. |
 | **Grounded answering** | `POST /v1/ask` retrieves receipt context, then a strict `AnswerResponse` schema (`answer`, `citations`, `found`). Citation *faithfulness* is scored in evals, not enforced at request time. |
-| **Bounded agent** | `POST /v1/agent` is a LangGraph tool loop over four application-owned tools. Reads run immediately. Writes call `interrupt()` and wait for `POST /v1/agent/resume`. `MAX_AGENT_STEPS` (default 8) stops a tool loop. The in-memory checkpointer is process-local. |
+| **Bounded agent** | `POST /v1/agent` is a LangGraph tool loop over four application-owned tools. Reads run immediately. Writes call `interrupt()` and wait for `POST /v1/agent/resume`. `MAX_AGENT_STEPS` (default 8) stops a tool loop. The in-memory checkpointer is process-local. The same four tools are also registered on an MCP stdio server (`python -m app.mcp_server`); an MCP client call runs the Python function, including writes. |
 | **Evaluation** | 60 labeled extraction fixtures and 69 retrieval questions. Extraction scoring runs the production `ExtractionService`. Retrieval ablation runs the production search/ask path. See [EVALS.md](EVALS.md). |
 | **Reproducible decoding** | Completions use `temperature=0.0` and `seed=42` by default. Prompt versions (`extraction-v1` production; `extraction-v2-evidence` experiment) are hashed in eval reports. |
 | **Provider reliability** | App-owned retries (SDK retries disabled): full-jitter backoff, per-attempt timeout, total deadline. Typed errors for credits (402), free-tier daily cap (429), deadline (504), other upstream (502). |
@@ -86,6 +86,9 @@ Dashboard / curl
         └─ /v1/agent ──► AgentService (LangGraph + InMemorySaver)
                          model ↔ allowlisted tools, max N rounds
                          reads run; writes interrupt until /v1/agent/resume
+
+MCP stdio (`python -m app.mcp_server`) calls the same four Python tools.
+Writes run immediately there, because the MCP client invoked the tool.
 ```
 
 ```
@@ -95,6 +98,7 @@ app/
   domain/         Outcome, ReceiptLLMOutput, ReceiptExtract, Ask/Answer schemas
   llm/            OpenRouter chat + embeddings + versioned prompts
   services/       extraction, postprocess, indexing, retrieval, answering, tools, agent
+  mcp_server.py   MCP stdio entry; same AgentTools
   repository/     SQLite or Postgres+pgvector ledger and document store
   seed/           merchant aliases + policy notes
   observability/  per-call cost JSONL
@@ -157,6 +161,8 @@ Optional `kind` filter: `receipt` \| `merchant_alias` \| `policy_note`.
 `POST /v1/agent` is a LangGraph tool-calling loop over the same ledger. The model may call `search_receipts` and `query_ledger` (named aggregates only — no SQL). `flag_for_review` and `mark_used` pause the graph with `interrupt()`; the response includes a `thread_id` and `stopped_reason=needs_approval`. `POST /v1/agent/resume` with `{thread_id, approved}` either runs the write or returns a tool error, then continues the loop. A hard `MAX_AGENT_STEPS` cap (default 8) stops a model that keeps requesting tools.
 
 The checkpointer is `InMemorySaver`: pending approvals live in the API process and are lost on restart. This is not a streaming endpoint.
+
+`python -m app.mcp_server` is a second doorbell for the same `AgentTools` class, over MCP stdio. `query_ledger` still only accepts `sum_total`, `count`, and `totals_by_merchant`. Calling `mark_used` or `flag_for_review` from an MCP client runs the write. `POST /v1/agent` still pauses those writes, because the caller there is the model.
 
 Search, ask, and agent are API-only; the dashboard does not expose them yet.
 
