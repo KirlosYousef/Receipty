@@ -12,6 +12,7 @@ from app.api.routes import router
 from app.core.config import Settings, get_settings
 from app.llm.embeddings import EmbeddingProvider, OpenRouterEmbeddings
 from app.llm.provider import LLMProvider, OpenRouterProvider
+from app.observability.tracing import SpanRecorder, bind_request_id
 from app.observability.usage import UsageLogger
 from app.repository.receipts import build_repository
 from app.services.agent import AgentService
@@ -44,8 +45,15 @@ def create_app(
         )
         repo.init_db()
 
-        provider = provider_factory(resolved_settings)
-        embeddings = embedding_factory(resolved_settings)
+        spans = SpanRecorder(resolved_settings.trace_log_path)
+        if provider_factory is OpenRouterProvider:
+            provider = OpenRouterProvider(resolved_settings, spans=spans)
+        else:
+            provider = provider_factory(resolved_settings)
+        if embedding_factory is OpenRouterEmbeddings:
+            embeddings = OpenRouterEmbeddings(resolved_settings, spans=spans)
+        else:
+            embeddings = embedding_factory(resolved_settings)
         usage = UsageLogger(resolved_settings.cost_log_path)
         service = ExtractionService(provider, usage)
         indexer = IndexingService(repo, embeddings)
@@ -55,11 +63,11 @@ def create_app(
             db_path=resolved_settings.db_path,
             database_url=resolved_settings.database_url,
         )
-        retrieval_service = RetrievalService(retrieval_repo, embeddings)
+        retrieval_service = RetrievalService(retrieval_repo, embeddings, spans=spans)
         answering_service = AnsweringService(provider, retrieval_service)
         agent_service = AgentService(
             provider,
-            AgentTools(repo, retrieval_service),
+            AgentTools(repo, retrieval_service, spans=spans),
             max_steps=resolved_settings.max_agent_steps,
             deadline_seconds=resolved_settings.max_agent_seconds,
         )
@@ -89,7 +97,8 @@ def create_app(
 
         request.state.request_id = request_id
 
-        response = await call_next(request)
+        with bind_request_id(request_id):
+            response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
 

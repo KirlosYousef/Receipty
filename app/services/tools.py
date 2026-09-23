@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.domain.schemas import Outcome
+from app.observability.tracing import SpanRecorder
 from app.repository.receipts import ReceiptRepository
 from app.services.retrieval import RetrievalService
 
@@ -102,9 +103,16 @@ def parse_args(model: type[BaseModel], raw: dict[str, Any]) -> BaseModel:
 
 
 class AgentTools:
-    def __init__(self, repo: ReceiptRepository, retrieval: RetrievalService):
+    def __init__(
+        self,
+        repo: ReceiptRepository,
+        retrieval: RetrievalService,
+        *,
+        spans: SpanRecorder | None = None,
+    ):
         self._repo = repo
         self._retrieval = retrieval
+        self._spans = spans or SpanRecorder(None)
 
     def search_receipts(self, raw: dict[str, Any]) -> list[dict]:
         args = parse_args(SearchReceiptsArgs, raw)
@@ -143,6 +151,10 @@ class AgentTools:
         return row
 
     def dispatch(self, name: str, raw: dict[str, Any]) -> Any:
-        if name not in KNOWN_TOOLS:
-            raise ToolError(f"unknown tool: {name}")
-        return getattr(self, name)(raw)
+        with self._spans.span(
+            f"execute_tool {name}",
+            {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": name},
+        ):
+            if name not in KNOWN_TOOLS:
+                raise ToolError(f"unknown tool: {name}")
+            return getattr(self, name)(raw)
