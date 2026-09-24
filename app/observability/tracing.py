@@ -8,6 +8,8 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
+from app.observability.redact import redact_pii
+
 _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 
 
@@ -60,9 +62,9 @@ class SpanRecorder:
             "duration_ms": round((time.perf_counter() - started) * 1000, 3),
             "request_id": fields.pop("request_id", current_request_id()),
         }
-        record.update(
-            {key: value for key, value in fields.items() if value is not None}
-        )
+        for key, value in fields.items():
+            if value is not None:
+                record[key] = redact_pii(value) if isinstance(value, str) else value
         if error_type is not None:
             record["error.type"] = error_type
         self._path.parent.mkdir(parents=True, exist_ok=True)

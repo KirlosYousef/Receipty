@@ -46,6 +46,7 @@ Aimed at AI / applied-ML engineering work: shipping extraction and retrieval sys
 | **Cost observability** | Per-call prompt/completion tokens and USD → `logs/cost.jsonl`; aggregated on `GET /v1/usage` and the dashboard. |
 | **Step traces** | Each chat completion, embedding call, retrieval, and tool call appends one JSON line to `logs/traces.jsonl`: request id, duration, model, token counts, provider USD cost when present, and `error.type` when the step fails. Tool arguments are not stored. |
 | **Embedding cache** | The same text reuses its vector for the life of the process, up to `EMBEDDING_CACHE_SIZE` entries. A cache hit skips the embedding provider, so it writes no embedding span and no cost line. Restarting the process drops the cache. |
+| **PII redaction** | Payment cards (13–19 digits), email addresses, phone numbers, and credentials (`Bearer`, `sk-*`) are redacted via `RedactingFilter` and `redact_pii` before reaching logs or trace attributes. |
 | **Testability** | `LLMProvider` / `EmbeddingProvider` protocols + `create_app(provider_factory=...)`. CI runs lint, types, a deterministic eval safety gate, coverage, and `pip-audit` **without** a live API key. |
 
 ## Truthful extraction contract
@@ -107,7 +108,7 @@ app/
   mcp_server.py   MCP stdio entry; same AgentTools
   repository/     SQLite or Postgres+pgvector ledger and document store
   seed/           merchant aliases + policy notes
-  observability/  per-call cost JSONL and step traces
+  observability/  per-call cost JSONL, step traces, and PII redactor
   static/         scan-deck dashboard
 evals/            extraction fixtures, retrieval questions, runners, scoring
 EVALS.md          eval contract, baselines, how to run
@@ -358,6 +359,7 @@ Covered behavior includes:
 - MCP server lists and calls the same four tools
 - Deterministic eval safety gate (invented totals must not pass)
 - Scripted agent cases: valid tool calls, rejected SQL, write pause, step cap
+- PII redaction: card numbers, email, phone, and tokens scrubbed from logs and traces
 - HTTP mapping, request-id, MIME rejection, lifespan close
 
 ## Config

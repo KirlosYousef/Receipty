@@ -17,6 +17,7 @@ from app.llm.embeddings import (
     OpenRouterEmbeddings,
 )
 from app.llm.provider import LLMProvider, OpenRouterProvider
+from app.observability.redact import install_redacting_filter
 from app.observability.tracing import SpanRecorder, bind_request_id
 from app.observability.usage import UsageLogger
 from app.repository.receipts import build_repository
@@ -51,6 +52,7 @@ def create_app(
     provider_factory: ProviderFactory = OpenRouterProvider,
     embedding_factory: EmbeddingFactory = OpenRouterEmbeddings,
 ) -> FastAPI:
+    install_redacting_filter()
     resolved_settings = settings or get_settings()
 
     @asynccontextmanager
