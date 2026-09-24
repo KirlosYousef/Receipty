@@ -49,7 +49,8 @@ class OpenRouterProvider:
         clock: Callable[[], float] | None = None,
         spans: SpanRecorder | None = None,
     ):
-        if not settings.openrouter_api_key:
+        api_key = settings.openrouter_api_key.get_secret_value()
+        if not api_key:
             raise ProviderError("OPENROUTER_API_KEY is not set")
 
         self._settings = settings
@@ -60,7 +61,7 @@ class OpenRouterProvider:
 
         self._client = OpenAI(
             base_url=settings.openrouter_base_url,
-            api_key=settings.openrouter_api_key,
+            api_key=api_key,
             max_retries=0,
         )
 

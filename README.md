@@ -389,6 +389,10 @@ Covered behavior includes:
 | `RATE_LIMIT_REQUESTS` | `60` (set `0` to allow every call) |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` |
 
+Secret storage, rotation, and emergency revocation are documented in
+[SECURITY.md](SECURITY.md). The local `.env` file is gitignored; deployed
+environments should inject secrets from the hosting platform's secret store.
+
 ## Out of scope
 
 Auth, multi-tenant isolation, bank sync, line-item extraction, classical OCR, fine-tuning, dashboard search/ask UI, runtime citation-set enforcement, and guessing missing totals.

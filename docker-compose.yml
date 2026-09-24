@@ -3,12 +3,22 @@ services:
     build: .
     ports:
       - "8000:8000"
-    env_file: .env
     environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      MODEL: ${MODEL:-google/gemini-3.1-flash-lite}
+      ESCALATION_MODEL: ${ESCALATION_MODEL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      EMBEDDING_CACHE_SIZE: ${EMBEDDING_CACHE_SIZE:-256}
+      MAX_AGENT_STEPS: ${MAX_AGENT_STEPS:-8}
+      MAX_AGENT_SECONDS: ${MAX_AGENT_SECONDS:-60}
+      MAX_AGENT_TOKENS: ${MAX_AGENT_TOKENS:-16000}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-60}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
       DB_PATH: /app/data/receipts.db
       COST_LOG_PATH: /app/logs/cost.jsonl
       TRACE_LOG_PATH: /app/logs/traces.jsonl
-      DATABASE_URL: postgres://receipty:receipty@db:5432/receipty
+      DATABASE_URL: postgres://${POSTGRES_USER:-receipty}:${POSTGRES_PASSWORD:-receipty}@db:5432/${POSTGRES_DB:-receipty}
     volumes:
       - receipty_data:/app/data
       - ./logs:/app/logs
@@ -19,9 +29,10 @@ services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: receipty
-      POSTGRES_PASSWORD: receipty
-      POSTGRES_DB: receipty
+      # These defaults are only for the isolated local Compose environment.
+      POSTGRES_USER: ${POSTGRES_USER:-receipty}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-receipty}
+      POSTGRES_DB: ${POSTGRES_DB:-receipty}
     volumes:
       - receipty_pg:/var/lib/postgresql/data
     healthcheck:
