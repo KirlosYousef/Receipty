@@ -59,6 +59,18 @@ usage for unexpected cost or models, confirm logs contain redaction markers
 rather than secret values, and record the incident without copying the key into
 the report.
 
+## Receipt image uploads
+
+The image route reads no more than `MAX_IMAGE_BYTES + 1` bytes before deciding
+whether to reject the file. It rejects empty files, unsupported MIME types, and
+JPEG, PNG, or WebP signatures that disagree with the declared type. Signature
+checks are a type filter, not a full image decode or malware scan. The bytes
+still go to the configured model provider after validation.
+
+FastAPI parses multipart bodies before the route runs. A public deployment must
+also set a request-body limit at the web server or reverse proxy, and enforce
+its own access policy before accepting private receipt data.
+
 ## Reporting a vulnerability
 
 Do not open a public issue containing credentials, receipt data, or exploit

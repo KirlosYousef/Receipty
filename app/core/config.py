@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
     cost_log_path: Path = Path("logs/cost.jsonl")
     trace_log_path: Path = Path("logs/traces.jsonl")
-    max_image_bytes: int = 8 * 1024 * 1024
+    max_image_bytes: int = Field(default=8 * 1024 * 1024, ge=1)
     max_attempts: int = Field(default=3, ge=1)
     total_deadline_seconds: float = Field(default=120.0, gt=0)
     retry_base_delay_seconds: float = Field(default=1.0, ge=0)
