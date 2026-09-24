@@ -312,6 +312,7 @@ python -m evals.retrieval_run --json reports/retrieval-ablation.json
 python -m evals.retrieval_run --live-embeddings --json reports/retrieval-live.json
 python -m evals.agent_run
 python -m evals.agent_demo
+python -m evals.trace_report
 ```
 
 The extraction runner builds the same `ExtractionService` + `OpenRouterProvider` + `UsageLogger` as the API (live key required). Combined `ok` requires receipt, total, and date. Merchant (normalized) and labelled currency are reported but do not change combined `ok`. Tax is stored, not scored.
@@ -330,6 +331,8 @@ Scores are evidence for **this fixture set**, not evidence-grounding or producti
 `python -m evals.agent_run` scores five scripted agent cases on the production `AgentService`: tool name, argument outcome, stop reason, and whether a write changed `used`. It does not measure a live model's tool choices.
 
 `python -m evals.agent_demo` prints two scripted runs on that same service: a finished count, then a provider failure that keeps the search step. It is a walkthrough, not a score.
+
+`python -m evals.trace_report` reads `logs/traces.jsonl` and prints span count, error rate, p50 and p95 of `duration_ms`, and USD cost per 100 spans. Spans with no cost count as zero. A missing file prints an empty summary. These numbers describe the steps in that file, not a labelled eval set.
 
 ## Tests and CI
 
