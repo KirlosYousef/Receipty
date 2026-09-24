@@ -28,3 +28,4 @@ logs/
 # Local evaluation artifacts
 reports/
 *.eval-report.json
+AGENTS.md
