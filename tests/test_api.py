@@ -101,12 +101,55 @@ def test_ingest_image(client: TestClient):
     assert r.json()["extract"]["merchant"] == "Test Cafe"
 
 
+@pytest.mark.parametrize(
+    ("content", "mime"),
+    [
+        (b"\x89PNG\r\n\x1a\nrest", "image/png"),
+        (b"RIFF1234WEBPrest", "image/webp"),
+    ],
+)
+def test_ingest_supported_image_signatures(
+    client: TestClient, content: bytes, mime: str
+):
+    response = client.post(
+        "/v1/ingest/image",
+        files={"file": ("receipt", content, mime)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["extract"]["merchant"] == "Test Cafe"
+
+
 def test_ingest_image_bad_mime(client: TestClient):
     r = client.post(
         "/v1/ingest/image",
         files={"file": ("r.gif", b"fake", "image/gif")},
     )
     assert r.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("content", "mime", "expected_status"),
+    [
+        (b"", "image/jpeg", 400),
+        (b"plain text", "image/jpeg", 400),
+        (b"\x89PNG\r\n\x1a\nrest", "image/jpeg", 400),
+        (b"\xff\xd8\xffrest", "image/png", 400),
+        (b"RIFF1234WEBPrest", "image/png", 400),
+        (b"\xff\xd8\xff" + b"x" * (8 * 1024 * 1024 - 2), "image/jpeg", 413),
+    ],
+)
+def test_invalid_image_does_not_call_provider_or_save_receipt(
+    client: TestClient, content: bytes, mime: str, expected_status: int
+):
+    response = client.post(
+        "/v1/ingest/image",
+        files={"file": ("receipt", content, mime)},
+    )
+
+    assert response.status_code == expected_status
+    assert client.app.state.test_provider.request_ids == []
+    assert client.app.state.repo.list_all() == []
 
 
 def test_ingest_indexes_receipt(client: TestClient):
