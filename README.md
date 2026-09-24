@@ -212,7 +212,7 @@ docker compose down
 docker compose down -v
 ```
 
-Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost logs bind-mount to `./logs`. Named volumes: `receipty_data` (unused SQLite path kept for compatibility) and `receipty_pg`.
+Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost and trace logs bind-mount to `./logs`. Named volumes: `receipty_data` (unused SQLite path kept for compatibility) and `receipty_pg`. Start, stop, and a failed-agent incident are in [RUNBOOK.md](RUNBOOK.md).
 
 ## API
 
@@ -226,7 +226,7 @@ Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost l
 | GET | `/v1/search` | Query `?q=...&strategy=keyword\|dense\|hybrid\|hybrid_rerank&limit=5&kind=receipt\|merchant_alias\|policy_note` |
 | POST | `/v1/ask` | JSON `{"question": "...", "strategy": "hybrid", "limit": 5}` → `{answer, citations, found}` |
 | POST | `/v1/agent` | JSON `{"question": "..."}` → `{answer, stopped_reason, steps, pending_mutation, thread_id}` |
-| POST | `/v1/agent/stream` | Same body as `/v1/agent`, as SSE events `step`, then `done` (or `error`) |
+| POST | `/v1/agent/stream` | Same body as `/v1/agent`, as SSE events `step`, then `done` |
 | POST | `/v1/agent/resume` | JSON `{"thread_id": "...", "approved": true}` → same shape; 404 unknown thread, 409 if not paused |
 | GET | `/v1/usage` | Aggregated cost / tokens (last 50 call rows) |
 
