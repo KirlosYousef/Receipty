@@ -270,6 +270,11 @@ Example success payload:
 
 ### Image ingest
 
+The route accepts JPEG, PNG, and WebP files up to `MAX_IMAGE_BYTES` (8 MiB by
+default). It checks the declared type against the file signature before making
+a provider call. A deployment also needs a request-body limit at its web server
+or reverse proxy: multipart parsing happens before this route checks the file.
+
 ```bash
 curl -s localhost:8000/v1/ingest/image \
   -F 'file=@evals/fixtures/1131-receipt.jpg'

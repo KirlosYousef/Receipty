@@ -95,7 +95,7 @@ def test_ingest_text(client: TestClient):
 def test_ingest_image(client: TestClient):
     r = client.post(
         "/v1/ingest/image",
-        files={"file": ("r.jpg", b"fake-image-bytes", "image/jpeg")},
+        files={"file": ("r.jpg", b"\xff\xd8\xfffake-image-bytes", "image/jpeg")},
     )
     assert r.status_code == 200
     assert r.json()["extract"]["merchant"] == "Test Cafe"
