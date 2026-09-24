@@ -2,10 +2,20 @@
 
 ## Provider API keys
 
-Receipty reads `OPENROUTER_API_KEY` at runtime. Pydantic stores it as a
-redacted secret value and the application unwraps it only when constructing an
+Receipty reads `OPENROUTER_API_KEY` at runtime. Local Python reads it from the
+gitignored `.env` file or the process environment. Docker Compose mounts the
+ignored `.secrets/openrouter_api_key` file at
+`/run/secrets/openrouter_api_key`; Pydantic reads that file. Pydantic holds the
+value in `SecretStr` and the application unwraps it when constructing an
 OpenRouter client. Do not print, serialize, trace, or return the unwrapped
 value.
+
+`SecretStr` masks routine display and JSON serialization. It does not encrypt
+the value or remove it from process memory. The OpenRouter client needs the
+real key to authenticate requests. Someone who controls the host or application
+process can still read it. Compose secrets reduce exposure through container
+environment inspection and grant the secret only to the API service. The local
+source file still needs appropriate filesystem protection.
 
 Treat configuration and secrets differently. A model name or timeout can be
 committed because it describes behavior. An API key grants access to an
@@ -13,8 +23,10 @@ external account and must stay outside the repository.
 
 ### Storage by environment
 
-- **Local development:** copy `.env.example` to the gitignored `.env` file and
-  put the key there. Docker Compose reads only the explicitly listed variables.
+- **Local development:** for direct Python runs, put the key in the gitignored
+  `.env` file. For Compose, put the key alone in the ignored
+  `.secrets/openrouter_api_key` file. Compose mounts it only into the API
+  container. `.dockerignore` excludes both files from the image build context.
 - **CI:** the standard quality workflow does not need a live provider key. If a
   separate live evaluation workflow is added, store its restricted key in the
   CI platform's encrypted secret store and expose it only to that job.

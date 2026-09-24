@@ -4,7 +4,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       MODEL: ${MODEL:-google/gemini-3.1-flash-lite}
       ESCALATION_MODEL: ${ESCALATION_MODEL:-}
@@ -22,6 +21,8 @@ services:
     volumes:
       - receipty_data:/app/data
       - ./logs:/app/logs
+    secrets:
+      - openrouter_api_key
     depends_on:
       db:
         condition: service_healthy
@@ -44,3 +45,7 @@ services:
 volumes:
   receipty_data:
   receipty_pg:
+
+secrets:
+  openrouter_api_key:
+    file: ./.secrets/openrouter_api_key

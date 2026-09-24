@@ -205,7 +205,16 @@ Get an OpenRouter key at [openrouter.ai](https://openrouter.ai). The default cha
 
 ### Docker
 
+For Compose, place the OpenRouter key alone in the ignored file
+`.secrets/openrouter_api_key`. The container reads it from
+`/run/secrets/openrouter_api_key`. The `.env` file can still hold non-secret
+Compose settings; its `OPENROUTER_API_KEY` entry is used only by a Python process
+started directly on the host. See [SECURITY.md](SECURITY.md) for the source and
+limits of each protection.
+
 ```bash
+mkdir -p .secrets
+# Put only your OpenRouter key in .secrets/openrouter_api_key.
 docker compose up --build
 # stop while keeping Postgres data
 docker compose down
@@ -390,7 +399,7 @@ Covered behavior includes:
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` |
 
 Secret storage, rotation, and emergency revocation are documented in
-[SECURITY.md](SECURITY.md). The local `.env` file is gitignored; deployed
+[SECURITY.md](SECURITY.md). Both local secret sources are gitignored; deployed
 environments should inject secrets from the hosting platform's secret store.
 
 ## Out of scope
