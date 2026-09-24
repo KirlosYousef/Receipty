@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from typing import Any
 
 # Card PANs: 13 to 19 digits with optional spaces or dashes
@@ -15,7 +16,7 @@ _PHONE_RE = re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\
 
 # Secret keys / Bearer tokens
 _BEARER_RE = re.compile(r"\bBearer\s+[A-Za-z0-9_\-\.~+/]+=*", re.IGNORECASE)
-_API_KEY_RE = re.compile(r"\b(?:sk|pk)(?:-[a-zA-Z0-9]+)?_[a-zA-Z0-9_\-]{16,}\b")
+_API_KEY_RE = re.compile(r"\b(?:sk|pk)[-_][A-Za-z0-9_-]{16,}\b")
 
 
 def _redact_cards(text: str) -> str:
@@ -51,6 +52,10 @@ class RedactingFilter(logging.Filter):
                 record.args = tuple(self._clean(arg) for arg in record.args)
             elif isinstance(record.args, dict):
                 record.args = {k: self._clean(v) for k, v in record.args.items()}
+        if record.exc_info is not None and record.exc_text is None:
+            record.exc_text = redact_pii(
+                logging.Formatter().formatException(record.exc_info)
+            )
         if isinstance(record.exc_text, str):
             record.exc_text = redact_pii(record.exc_text)
         return True
@@ -61,13 +66,40 @@ class RedactingFilter(logging.Filter):
         return value
 
 
+class _RedactingRecordFactory:
+    """Apply redaction to every record before logger handlers receive it."""
+
+    def __init__(
+        self,
+        previous: Callable[..., logging.LogRecord],
+        filter_instance: RedactingFilter,
+    ) -> None:
+        self._previous = previous
+        self.filter_instance = filter_instance
+
+    def __call__(self, *args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = self._previous(*args, **kwargs)
+        self.filter_instance.filter(record)
+        return record
+
+
 def install_redacting_filter(
     target_logger: logging.Logger | None = None,
 ) -> RedactingFilter:
-    log_obj = target_logger or logging.getLogger()
-    for existing in log_obj.filters:
+    if target_logger is None:
+        current_factory = logging.getLogRecordFactory()
+        if isinstance(current_factory, _RedactingRecordFactory):
+            return current_factory.filter_instance
+
+        filter_instance = RedactingFilter()
+        logging.setLogRecordFactory(
+            _RedactingRecordFactory(current_factory, filter_instance)
+        )
+        return filter_instance
+
+    for existing in target_logger.filters:
         if isinstance(existing, RedactingFilter):
             return existing
     filter_instance = RedactingFilter()
-    log_obj.addFilter(filter_instance)
+    target_logger.addFilter(filter_instance)
     return filter_instance
