@@ -64,13 +64,14 @@ class OpenRouterEmbeddings:
 
         from app.core.exceptions import ProviderError
 
-        if not settings.openrouter_api_key:
+        api_key = settings.openrouter_api_key.get_secret_value()
+        if not api_key:
             raise ProviderError("OPENROUTER_API_KEY is not set")
         self._model = settings.embedding_model
         self._spans = spans or SpanRecorder(None)
         self._client = OpenAI(
             base_url=settings.openrouter_base_url,
-            api_key=settings.openrouter_api_key,
+            api_key=api_key,
             max_retries=0,
         )
 
