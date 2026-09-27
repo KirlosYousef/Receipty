@@ -71,6 +71,22 @@ FastAPI parses multipart bodies before the route runs. A public deployment must
 also set a request-body limit at the web server or reverse proxy, and enforce
 its own access policy before accepting private receipt data.
 
+## Demo owner access
+
+All routes except `/health` require HTTP Basic credentials by default. The
+single owner's password is `AUTH_PASSWORD`, held as a Pydantic `SecretStr` and
+compared with a timing-safe function. Startup fails if authentication is enabled
+and the password is missing or shorter than 16 characters. Compose mounts the
+ignored `.secrets/auth_password` file only into the API container. Direct local
+Python runs can use `AUTH_PASSWORD` in the ignored `.env` file.
+
+Use HTTPS at the deployment edge: HTTP Basic sends the password with every
+request. Do not put it in a URL, command-line argument, log, or screenshot.
+`AUTH_REQUIRED=false` is only for isolated local development. This gate gives
+one owner access to the whole demo; it does not identify multiple users or
+isolate their receipts. Per-user authorization is still required before a
+multi-user release.
+
 ## Reporting a vulnerability
 
 Do not open a public issue containing credentials, receipt data, or exploit

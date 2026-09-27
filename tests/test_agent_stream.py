@@ -75,6 +75,7 @@ def test_stream_write_pauses_and_resume_still_applies(tmp_path):
 def test_agent_stream_http_and_provider_error(tmp_path):
     provider = ScriptedProvider([])
     settings = Settings(
+        auth_required=False,
         openrouter_api_key="test-key",
         db_path=tmp_path / "sse.db",
         cost_log_path=tmp_path / "cost.jsonl",

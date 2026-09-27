@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     )
 
     openrouter_api_key: SecretStr = SecretStr("")
+    auth_required: bool = True
+    auth_username: str = "owner"
+    auth_password: SecretStr = SecretStr("")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     model: str = "google/gemini-3.1-flash-lite"
     escalation_model: str = ""

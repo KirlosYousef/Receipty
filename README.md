@@ -195,7 +195,7 @@ Open [http://localhost:8000/](http://localhost:8000/) after startup.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env   # set OPENROUTER_API_KEY
+cp .env.example .env   # set OPENROUTER_API_KEY and a unique AUTH_PASSWORD
 python -m uvicorn app.main:app --reload
 # optional: MCP stdio server for the same four ledger tools
 python -m app.mcp_server
@@ -206,15 +206,17 @@ Get an OpenRouter key at [openrouter.ai](https://openrouter.ai). The default cha
 ### Docker
 
 For Compose, place the OpenRouter key alone in the ignored file
-`.secrets/openrouter_api_key`. The container reads it from
-`/run/secrets/openrouter_api_key`. The `.env` file can still hold non-secret
-Compose settings; its `OPENROUTER_API_KEY` entry is used only by a Python process
-started directly on the host. See [SECURITY.md](SECURITY.md) for the source and
-limits of each protection.
+`.secrets/openrouter_api_key` and a separate, unique, random owner password of
+at least 16 characters in `.secrets/auth_password`. The container reads them
+from `/run/secrets/`. The `.env` file can still hold non-secret Compose settings;
+its `OPENROUTER_API_KEY` and `AUTH_PASSWORD` entries are used only by a Python
+process started directly on the host. See [SECURITY.md](SECURITY.md) for the
+source and limits of each protection.
 
 ```bash
 mkdir -p .secrets
 # Put only your OpenRouter key in .secrets/openrouter_api_key.
+# Put a different random 16+ character password in .secrets/auth_password.
 docker compose up --build
 # stop while keeping Postgres data
 docker compose down
@@ -242,12 +244,20 @@ Compose runs `pgvector/pgvector:pg16` and sets `DATABASE_URL` on the API. Cost a
 
 Interactive OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs).
 
+All routes except `/health` require HTTP Basic login by default. The username
+is `owner` unless `AUTH_USERNAME` is set. Your browser prompts once when opening
+the dashboard; API clients can use `curl -u owner` and enter the password at its
+prompt. Never place the password directly in a command, URL, or Git file. Use
+HTTPS for any network access; Basic sends the credential on every request and
+does not provide per-user identities or data isolation. For a machine-local
+development session only, `AUTH_REQUIRED=false` disables this gate.
+
 Optional `X-Request-ID` (1–64 of `A-Za-z0-9._-`) is echoed on the response and included in provider retry logs; otherwise a UUID is generated.
 
 ### Text ingest
 
 ```bash
-curl -s localhost:8000/v1/ingest \
+curl -u owner -s localhost:8000/v1/ingest \
   -H 'content-type: application/json' \
   -d '{"text":"Carrefour\nTOTAL 186.50 EGP"}'
 ```
@@ -276,24 +286,24 @@ a provider call. A deployment also needs a request-body limit at its web server
 or reverse proxy: multipart parsing happens before this route checks the file.
 
 ```bash
-curl -s localhost:8000/v1/ingest/image \
+curl -u owner -s localhost:8000/v1/ingest/image \
   -F 'file=@evals/fixtures/1131-receipt.jpg'
 ```
 
 ### Search and ask
 
 ```bash
-curl -s 'localhost:8000/v1/search?q=Carrefour&strategy=hybrid&limit=5'
-curl -s localhost:8000/v1/ask \
+curl -u owner -s 'localhost:8000/v1/search?q=Carrefour&strategy=hybrid&limit=5'
+curl -u owner -s localhost:8000/v1/ask \
   -H 'content-type: application/json' \
   -d '{"question":"What did I spend at Carrefour?","strategy":"hybrid","limit":5}'
-curl -s localhost:8000/v1/agent \
+curl -u owner -s localhost:8000/v1/agent \
   -H 'content-type: application/json' \
   -d '{"question":"How much did I spend at Taco Bell?"}'
-curl -N localhost:8000/v1/agent/stream \
+curl -u owner -N localhost:8000/v1/agent/stream \
   -H 'content-type: application/json' \
   -d '{"question":"How much did I spend at Taco Bell?"}'
-curl -s localhost:8000/v1/agent/resume \
+curl -u owner -s localhost:8000/v1/agent/resume \
   -H 'content-type: application/json' \
   -d '{"thread_id":"THREAD_ID","approved":true}'
 ```

@@ -56,6 +56,7 @@ def test_provider_is_reused_and_closed(tmp_path: Path):
         return provider
 
     settings = Settings(
+        auth_required=False,
         openrouter_api_key="test-key",
         db_path=tmp_path / "receipts.db",
         cost_log_path=tmp_path / "cost.jsonl",
@@ -88,6 +89,7 @@ def test_provider_is_reused_and_closed(tmp_path: Path):
 
 def test_missing_api_key_fails_during_startup(tmp_path: Path):
     settings = Settings(
+        auth_required=False,
         openrouter_api_key="",
         db_path=tmp_path / "receipts.db",
         cost_log_path=tmp_path / "cost.jsonl",

@@ -263,6 +263,7 @@ def test_agent_http_runs_read_tools(tmp_path: Path):
         ]
     )
     settings = Settings(
+        auth_required=False,
         openrouter_api_key="test-key",
         db_path=tmp_path / "http.db",
         cost_log_path=tmp_path / "cost.jsonl",
@@ -375,6 +376,7 @@ def test_approve_at_max_steps_applies_write_without_another_model_call(
 def test_agent_http_resume_approve_and_errors(tmp_path: Path):
     provider = ScriptedProvider([])
     settings = Settings(
+        auth_required=False,
         openrouter_api_key="test-key",
         db_path=tmp_path / "hitl.db",
         cost_log_path=tmp_path / "cost.jsonl",
