@@ -5,6 +5,8 @@ services:
       - "8000:8000"
     environment:
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      AUTH_REQUIRED: "true"
+      AUTH_USERNAME: ${AUTH_USERNAME:-owner}
       MODEL: ${MODEL:-google/gemini-3.1-flash-lite}
       ESCALATION_MODEL: ${ESCALATION_MODEL:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openai/text-embedding-3-small}
@@ -23,6 +25,7 @@ services:
       - ./logs:/app/logs
     secrets:
       - openrouter_api_key
+      - auth_password
     depends_on:
       db:
         condition: service_healthy
@@ -49,3 +52,5 @@ volumes:
 secrets:
   openrouter_api_key:
     file: ./.secrets/openrouter_api_key
+  auth_password:
+    file: ./.secrets/auth_password

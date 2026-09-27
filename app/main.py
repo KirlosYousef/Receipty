@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.auth import owner_authorized
 from app.api.rate_limit import LIMITED_ROUTES, RateLimiter
 from app.api.routes import router
 from app.core.config import Settings, get_settings
@@ -57,6 +58,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if resolved_settings.auth_required and (
+            not resolved_settings.auth_username
+            or len(resolved_settings.auth_password.get_secret_value()) < 16
+        ):
+            raise RuntimeError(
+                "AUTH_PASSWORD must contain at least 16 characters when AUTH_REQUIRED is true"
+            )
         repo = build_repository(
             db_path=resolved_settings.db_path,
             database_url=resolved_settings.database_url,
@@ -127,6 +135,20 @@ def create_app(
             request_id = str(uuid4())
 
         request.state.request_id = request_id
+        if (
+            resolved_settings.auth_required
+            and request.url.path != "/health"
+            and not owner_authorized(request, resolved_settings)
+        ):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required"},
+                headers={
+                    "WWW-Authenticate": 'Basic realm="Receipty"',
+                    "X-Request-ID": request_id,
+                    "Cache-Control": "no-store",
+                },
+            )
         client = request.client.host if request.client else "unknown"
         route = (request.method, request.url.path)
         if route in LIMITED_ROUTES and not limiter.allow(client):

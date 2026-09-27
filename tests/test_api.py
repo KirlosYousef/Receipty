@@ -51,6 +51,7 @@ def client(tmp_path: Path):
     )
 
     settings = Settings(
+        auth_required=False,
         openrouter_api_key="test-key",
         db_path=tmp_path / "test.db",
         cost_log_path=tmp_path / "cost.jsonl",

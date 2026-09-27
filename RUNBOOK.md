@@ -6,10 +6,14 @@ Local API on port 8000. There is no public URL in this repo.
 
 ```bash
 source .venv/bin/activate
+# Set a unique 16+ character AUTH_PASSWORD in the ignored .env first.
 python -m uvicorn app.main:app --reload
 ```
 
 Docker Compose starts the API and Postgres with pgvector:
+
+Place the owner password in ignored `.secrets/auth_password` before starting.
+The browser prompts for the `owner` login. Only `/health` is public.
 
 ```bash
 docker compose up --build

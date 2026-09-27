@@ -20,6 +20,7 @@ def test_window_drops_hits_that_are_older_than_the_limit():
 
 def test_model_routes_return_429_and_health_stays_open(tmp_path: Path):
     settings = Settings(
+        auth_required=False,
         openrouter_api_key="test-key",
         db_path=tmp_path / "test.db",
         cost_log_path=tmp_path / "cost.jsonl",
