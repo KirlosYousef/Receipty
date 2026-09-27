@@ -43,6 +43,17 @@ log = logging.getLogger(__name__)
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp"}
 
 
+def _image_mime(data: bytes) -> str | None:
+    """Recognize the three image formats accepted by the provider boundary."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 def _index_receipt(
     indexer: IndexingService, receipt_id: int, extract: ReceiptExtract
 ) -> None:
@@ -96,12 +107,14 @@ def ingest_image(
     indexer: IndexingService = Depends(get_indexer),
     settings: Settings = Depends(get_settings),
 ) -> IngestResponse:
-    mime = file.content_type or "image/jpeg"
+    mime = file.content_type
     if mime not in ALLOWED_MIME:
         raise HTTPException(400, "jpeg/png/webp only")
-    data = file.file.read()
+    data = file.file.read(settings.max_image_bytes + 1)
     if len(data) > settings.max_image_bytes:
         raise HTTPException(413, f"image exceeds {settings.max_image_bytes} bytes")
+    if _image_mime(data) != mime:
+        raise HTTPException(400, "image bytes do not match declared type")
     try:
         extract = service.extract_from_image(
             data,
